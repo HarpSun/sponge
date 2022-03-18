@@ -1,3 +1,5 @@
+#include <cstring>
+
 #include "byte_stream.hh"
 
 // Dummy implementation of a flow-controlled in-memory byte stream.
@@ -12,11 +14,35 @@ void DUMMY_CODE(Targs &&... /* unused */) {}
 
 using namespace std;
 
-ByteStream::ByteStream(const size_t capacity) { DUMMY_CODE(capacity); }
+// ByteStream 就是一块固定大小的内存 可以对它进行读写
+// 所以初始化就是申请一块内存 大小为参数 capacity 所指定
+
+// 这里官方设置的编译器会要求你按照特定方式来写构造函数 非常 nb
+// 初始化可以直接抄下面的写法
+// 经过试错 发现规则如下（感兴趣可以看，不感兴趣直接抄就好，这些知识没啥用）
+// 1. 实例属性的初始化必须按照 member initlization list 的写法(就问你 nb 不 nb)
+// 而不是正常人那样在构造函数里面初始化 至于这个 dududu 写法怎么写参考下面
+// 2. 实例属性的初始化顺序必须和头文件声明的保持一致
+
+ByteStream::ByteStream(const size_t capacity): size{capacity}, memory{} {
+
+}
 
 size_t ByteStream::write(const string &data) {
-    DUMMY_CODE(data);
-    return {};
+    // Write a string of bytes into the stream. Write as many
+    // as will fit, and return the number of bytes written.
+    // 往内存里面写数据 但是因为我们内存大小有限 所以要考虑 data 超过内存大小的情况
+    // 这里采用简单的方案
+    // 1. 检查 data 长度
+    // -- 如果超了就删掉超过的部分 然后写入
+    // -- 如果没超 直接写
+    // 2. 返回写入的长度
+    string writtenData = data;
+    if (data.size() > this->size) {
+        writtenData = data.substr(0, this->size);
+    }
+    memcpy(this->memory, writtenData.c_str(), writtenData.size());
+    return writtenData.size();
 }
 
 //! \param[in] len bytes will be copied from the output side of the buffer
