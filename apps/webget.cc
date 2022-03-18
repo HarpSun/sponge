@@ -17,8 +17,31 @@ void get_URL(const string &host, const string &path) {
     // (not just one call to read() -- everything) until you reach
     // the "eof" (end of file).
 
-    cerr << "Function called: get_URL(" << host << ", " << path << ").\n";
-    cerr << "Warning: get_URL() has not been implemented yet.\n";
+    // 1 创建 socket 对象
+    // 2 socket.connect() 连接远程服务器
+    // 3 socket.send() 发送 HTTP 报文
+    // 4 获取响应并输出
+
+    TCPSocket socket;
+    // http 默认 80 端口
+    socket.connect(Address(host, "http"));
+
+    // 用下面的方式来格式化字符串
+    char httpString[100];
+    snprintf(httpString,
+             sizeof(httpString),
+             "GET %s HTTP/1.1\r\nHost: %s\r\n\r\n", path.c_str(), host.c_str());
+
+    socket.write(httpString);
+    // SHUT_WR 表示之后这个 socket 只能收数据 不能再发送了
+    socket.shutdown(SHUT_WR);
+
+    string response;
+    int size = 1024;
+    while (not socket.eof()) {
+        response += socket.read(size);
+    }
+    cout << response;
 }
 
 int main(int argc, char *argv[]) {
