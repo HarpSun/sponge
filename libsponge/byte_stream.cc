@@ -24,25 +24,26 @@ using namespace std;
 // 而不是正常人那样在构造函数里面初始化 至于这个 dududu 写法怎么写参考下面
 // 2. 实例属性的初始化顺序必须和头文件声明的保持一致
 
+// int size 表示内存的大小
+// vector<char> memory 用来存储数据
 ByteStream::ByteStream(const size_t capacity): size{capacity}, memory{} {
 
 }
 
 size_t ByteStream::write(const string &data) {
-    // Write a string of bytes into the stream. Write as many
-    // as will fit, and return the number of bytes written.
     // 往内存里面写数据 但是因为我们内存大小有限 所以要考虑 data 超过内存大小的情况
     // 这里采用简单的方案
     // 1. 检查 data 长度
-    // -- 如果超了就删掉超过的部分 然后写入
-    // -- 如果没超 直接写
-    // 2. 返回写入的长度
+    // 2. 如果超了就把超过的部分丢掉
+    // 3. 写入内存
     string writtenData = data;
     if (data.size() > this->size) {
         writtenData = data.substr(0, this->size);
     }
-    memcpy(this->memory, writtenData.c_str(), writtenData.size());
-    return writtenData.size();
+    for (size_t i = 0; i < writtenData.size(); i++) {
+        this->memory.push_back(writtenData[i]);
+    }
+    return this->memory.size();
 }
 
 //! \param[in] len bytes will be copied from the output side of the buffer
@@ -72,7 +73,9 @@ bool ByteStream::buffer_empty() const { return {}; }
 
 bool ByteStream::eof() const { return false; }
 
-size_t ByteStream::bytes_written() const { return {}; }
+size_t ByteStream::bytes_written() const {
+     return this->memory.size();
+}
 
 size_t ByteStream::bytes_read() const { return {}; }
 
