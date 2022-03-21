@@ -15,6 +15,9 @@ class ByteStream {
   private:
     // Your code here -- add private members as necessary.
     size_t size;
+    // 数据每次读一部分，分多次读完
+    // 所以我们需要用一个变量记录读到哪里了
+    int offset;
     vector<char> memory;
     // Hint: This doesn't need to be a sophisticated data structure at
     // all, but if any of your tests are taking longer than a second,

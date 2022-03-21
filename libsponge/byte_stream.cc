@@ -24,9 +24,13 @@ using namespace std;
 // 而不是正常人那样在构造函数里面初始化 至于这个 dududu 写法怎么写参考下面
 // 2. 实例属性的初始化顺序必须和头文件声明的保持一致
 
-// int size 表示内存的大小
-// vector<char> memory 用来存储数据
-ByteStream::ByteStream(const size_t capacity): size{capacity}, memory{} {
+// size 表示内存的大小 类型是 int
+// offset 用来记录 reader 读到了哪里 类型是 int
+// memory 用来存储数据 类型是 vector<char>
+ByteStream::ByteStream(const size_t capacity):
+    size{capacity},
+    offset{0},
+    memory{} {
 
 }
 
@@ -79,4 +83,6 @@ size_t ByteStream::bytes_written() const {
 
 size_t ByteStream::bytes_read() const { return {}; }
 
-size_t ByteStream::remaining_capacity() const { return {}; }
+size_t ByteStream::remaining_capacity() const {
+    return this->size - this->memory.size();
+}
