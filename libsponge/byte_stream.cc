@@ -57,8 +57,6 @@ size_t ByteStream::write(const string &data) {
 
 //! \param[in] len bytes will be copied from the output side of the buffer
 string ByteStream::peek_output(const size_t len) const {
-    // offset 标识 reader 读到哪里了
-    // 所以返回 offset 往后的 len 个字节的内容就行
     // 有一个边界情况就是如果 len 超过了数据的长度怎么处理
     // 这里先不管
     string res = "";
@@ -70,9 +68,6 @@ string ByteStream::peek_output(const size_t len) const {
 
 //! \param[in] len bytes will be removed from the output side of the buffer
 void ByteStream::pop_output(const size_t len) {
-    // 丢弃从 offset 开始往后读取 len 个字节的数据
-    // 1. memory 数组要 Pop 掉 len 个元素
-    // 2. offset + len
     for (size_t i = 0; i < len; i++) {
         this->byteQueue.pop_front();
     }
@@ -83,12 +78,11 @@ void ByteStream::pop_output(const size_t len) {
 //! \param[in] len bytes will be popped and returned
 //! \returns a string
 std::string ByteStream::read(const size_t len) {
-    // 从 offset 开始往后读取 len 个字节的数据并返回
     // 和 pop_output 很相似 唯一的区别是要返回读到的数据
     string res = "";
     for (size_t i = 0; i < len; i++) {
         // c++ dequeu pop_front 不返回 pop 掉的元素。。。
-        // 所以 pop 前要先获取 front 
+        // 所以 pop 前要先获取 front
         res += this->byteQueue.front();
         this->byteQueue.pop_front();
     }
