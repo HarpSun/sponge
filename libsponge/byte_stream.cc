@@ -1,5 +1,3 @@
-#include <cstring>
-
 #include "byte_stream.hh"
 
 // Dummy implementation of a flow-controlled in-memory byte stream.
@@ -26,11 +24,15 @@ using namespace std;
 
 // size 表示内存的大小 类型是 int
 // offset 用来记录 reader 读到了哪里 类型是 int
-// memory 用来存储数据 类型是 vector<char>
+// endInput 表示供 writer 调用 如果数据写完了
+// byteQueue 用来存储数据 类型是 deque<char>
+// 为什么用 deque
 ByteStream::ByteStream(const size_t capacity):
-    size{capacity},
-    offset{0},
-    memory{} {
+    size(capacity),
+    bytesWritten(0),
+    bytesRead(0),
+    inputEnded(false),
+    byteQueue() {
 
 }
 
@@ -41,48 +43,89 @@ size_t ByteStream::write(const string &data) {
     // 2. 如果超了就把超过的部分丢掉
     // 3. 写入内存
     string writtenData = data;
-    if (data.size() > this->size) {
-        writtenData = data.substr(0, this->size);
+    size_t emptySize = this->size - this->byteQueue.size();
+    if (data.size() > emptySize) {
+        writtenData = data.substr(0, emptySize);
     }
+    // write to stream
     for (size_t i = 0; i < writtenData.size(); i++) {
-        this->memory.push_back(writtenData[i]);
+        this->byteQueue.push_back(writtenData[i]);
     }
-    return this->memory.size();
+    this->bytesWritten += writtenData.size();
+    return writtenData.size();
 }
 
 //! \param[in] len bytes will be copied from the output side of the buffer
 string ByteStream::peek_output(const size_t len) const {
-    DUMMY_CODE(len);
-    return {};
+    // offset 标识 reader 读到哪里了
+    // 所以返回 offset 往后的 len 个字节的内容就行
+    // 有一个边界情况就是如果 len 超过了数据的长度怎么处理
+    // 这里先不管
+    string res = "";
+    for (size_t i = 0; i < len; i++) {
+        res += this->byteQueue[i];
+    }
+    return res;
 }
 
 //! \param[in] len bytes will be removed from the output side of the buffer
-void ByteStream::pop_output(const size_t len) { DUMMY_CODE(len); }
+void ByteStream::pop_output(const size_t len) {
+    // 丢弃从 offset 开始往后读取 len 个字节的数据
+    // 1. memory 数组要 Pop 掉 len 个元素
+    // 2. offset + len
+    for (size_t i = 0; i < len; i++) {
+        this->byteQueue.pop_front();
+    }
+    this->bytesRead += len;
+}
 
 //! Read (i.e., copy and then pop) the next "len" bytes of the stream
 //! \param[in] len bytes will be popped and returned
 //! \returns a string
 std::string ByteStream::read(const size_t len) {
-    DUMMY_CODE(len);
-    return {};
+    // 从 offset 开始往后读取 len 个字节的数据并返回
+    // 和 pop_output 很相似 唯一的区别是要返回读到的数据
+    string res = "";
+    for (size_t i = 0; i < len; i++) {
+        // c++ dequeu pop_front 不返回 pop 掉的元素。。。
+        // 所以 pop 前要先获取 front 
+        res += this->byteQueue.front();
+        this->byteQueue.pop_front();
+    }
+    this->bytesRead += len;
+    return res;
 }
 
-void ByteStream::end_input() {}
+void ByteStream::end_input() {
+    this->inputEnded = true;
+}
 
-bool ByteStream::input_ended() const { return {}; }
+bool ByteStream::input_ended() const {
+    return this->inputEnded;
+}
 
-size_t ByteStream::buffer_size() const { return {}; }
+size_t ByteStream::buffer_size() const {
+    // buffer 就是还没有读的数据
+    return this->byteQueue.size();
+}
 
-bool ByteStream::buffer_empty() const { return {}; }
+bool ByteStream::buffer_empty() const {
+    return this->byteQueue.size() == 0;
+}
 
-bool ByteStream::eof() const { return false; }
+bool ByteStream::eof() const {
+    // 数据是否读完 和 buffer_empty 有啥区别？？？
+    return this->byteQueue.size() == 0 and this->inputEnded;
+}
 
 size_t ByteStream::bytes_written() const {
-     return this->memory.size();
+     return this->bytesWritten;
 }
 
-size_t ByteStream::bytes_read() const { return {}; }
+size_t ByteStream::bytes_read() const {
+    return this->bytesRead;
+}
 
 size_t ByteStream::remaining_capacity() const {
-    return this->size - this->memory.size();
+    return this->size - this->byteQueue.size();
 }

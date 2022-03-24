@@ -1,8 +1,9 @@
 #ifndef SPONGE_LIBSPONGE_BYTE_STREAM_HH
 #define SPONGE_LIBSPONGE_BYTE_STREAM_HH
 
+#include <iostream>
 #include <string>
-#include <vector>
+#include <deque>
 
 using namespace std;
 
@@ -17,8 +18,10 @@ class ByteStream {
     size_t size;
     // 数据每次读一部分，分多次读完
     // 所以我们需要用一个变量记录读到哪里了
-    int offset;
-    vector<char> memory;
+    int bytesWritten;
+    int bytesRead;
+    bool inputEnded;
+    deque<char> byteQueue;
     // Hint: This doesn't need to be a sophisticated data structure at
     // all, but if any of your tests are taking longer than a second,
     // that's a sign that you probably want to keep exploring
