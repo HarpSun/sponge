@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <string>
+#include <map>
 
 //! \brief A class that assembles a series of excerpts from a byte stream (possibly out of order,
 //! possibly overlapping) into an in-order byte stream.
@@ -14,6 +15,9 @@ class StreamReassembler {
 
     ByteStream _output;  //!< The reassembled in-order byte stream
     size_t _capacity;    //!< The maximum number of bytes
+
+    size_t nextReassembledIndex; // 下一个要重组的下标 比如完整数据是 hello 已经重组了 he 那么这个值就是 2
+    map<int, string> unassebmledMap; // 等待重组的数据 key 是下标 value 是数据
 
   public:
     //! \brief Construct a `StreamReassembler` that will store up to `capacity` bytes.

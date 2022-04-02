@@ -17,7 +17,11 @@ using namespace std;
 // （不可能没收到 因为这是 TCP 协议没收到会重发 不过这里先不用管。。。）
 // 我们要将乱序的数据重组之后写到 _output 属性里面
 // _output 就是 lab0 的 ByteStream
-StreamReassembler::StreamReassembler(const size_t capacity) : _output(capacity), _capacity(capacity) {}
+StreamReassembler::StreamReassembler(const size_t capacity) :
+    _output(capacity),
+    _capacity(capacity),
+    nextReassembledIndex(0),
+    unassebmledMap() {}
 
 //! \details This function accepts a substring (aka a segment) of bytes,
 //! possibly out-of-order, from the logical stream, and assembles any newly
@@ -36,7 +40,23 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
     // 实现这个函数的时候要考虑如下情况
     // 1. 收到的数据有可能包含重复的 比如 he, ello
     // 2. 收到的数据有可能是乱序的  比如 llo, he
-    DUMMY_CODE(data, index, eof);
+
+    // 所以实现思路如下
+    // 1. index 和 nextReassembledIndex 对比
+    // 如果等于表示这段数据正好可以写入 output
+    // 如果小于表示这段数据有重复的 那么舍弃重复部分写入 output
+    // 如果大于表示这段数据是乱序的 先写入临时存储 unassebmledMap 供后续使用
+    // 2. 写入 data 之后 扫描 unassebmledMap 的 key 也就是等待重组的数据段下标
+    // 和 nextReassembledIndex 对比 按照 1 的逻辑写入数据
+    if (index == nextReassembledIndex) {
+        this->_output.write(data);
+    } else if (index < nextReassembledIndex) {
+        string s = data.substr(nextReassembledIndex - index, data.size());
+        this->_output.write(s);
+    } else {
+
+    }
+    DUMMY_CODE(eof);
 }
 
 size_t StreamReassembler::unassembled_bytes() const { return {}; }
