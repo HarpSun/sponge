@@ -1,5 +1,7 @@
 #include "wrapping_integers.hh"
 
+#include <iostream>
+
 // Dummy implementation of a 32-bit wrapping integer
 
 // For Lab 2, please replace with a real implementation that passes the
@@ -55,13 +57,13 @@ WrappingInt32 wrap(uint64_t n, WrappingInt32 isn) {
 //! and the other stream runs from the remote TCPSender to the local TCPReceiver and
 //! has a different ISN.
 uint64_t unwrap(WrappingInt32 n, WrappingInt32 isn, uint64_t checkpoint) {
-    // isn 是起始序列号 n 是 32 位的 tcp header 序列号 计算绝对序列号
+    // isn 是起始序列号， n 是 32 位的 tcp header 序列号， 计算绝对序列号
     // 举个简单的例子还是 cat 但是 isn 是 1 那么 c 就是 2
     // 1 2 ... 2 ^ 32 - 1  0           1       2
     // 0 1 ... 2 ^ 32 - 2  2 ^ 32 - 1  2 ^ 32  2 ^ 32 + 1
     // 计算 c 的绝对序列号就是 isn - n
     // 但是假如我们把 cat 变长 cattt.....
-    // 那么同样的 isn 和 n 绝对序列号也可能是 2 ^ 32 + 3
+    // 那么同样的 isn 和 n 绝对序列号也可能是 2 ^ 32 + 1
 
     // 这种情况怎么确定绝对序列号的值呢 所以有 checkpoint 这个参数
     // checkpoint 是我们最后 reassembler 最后重组的一段数据的下标
@@ -71,10 +73,21 @@ uint64_t unwrap(WrappingInt32 n, WrappingInt32 isn, uint64_t checkpoint) {
     // 比如说数据是 hello 重组到了 hel 这时候 checkpoint 就是 2
     // 这时候可能会收到 ello 那么 seq 是 1
     // bool b = operator==(WrappingInt32{0}, WrappingInt32{0});
-    uint64_t abs = n - isn;
-    for (size_t i = 0; i < 32; i++) {
 
+    // 1. 将 checkpoint 转换为 uint32
+    // 2. 计算 checkpoint 到 seqno 的距离
+    // 3. 计算两个值之间和 checkpoint 的距离 最小的为结果
+
+    int32_t steps = n - wrap(checkpoint, isn);
+    int64_t res = checkpoint + steps;
+    if (res >= 0) {
+        return checkpoint + steps;
+    } else {
+        return res + (1UL << 32);
     }
-    DUMMY_CODE(n, isn, checkpoint);
-    return {};
 }
+
+// 草 这个作业太 sb 了
+// tcp header 迭代一版本 支持 64 bit 序列号不就没事了。。。
+// 查了一下还真有这个提案。。。
+// http://www.watersprings.org/pub/id/draft-looney-tcpm-64-bit-seqnos-00.html
