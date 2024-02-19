@@ -30,7 +30,7 @@ StreamReassembler::StreamReassembler(const size_t capacity) :
 //! possibly out-of-order, from the logical stream, and assembles any newly
 //! contiguous substrings and writes them into the output stream in order.
 // tcp reciver 收到数据后通过调用这个函数将数据进行重组
-void StreamReassembler::push_substring(const string &data, const size_t index, const bool eof)  {
+void StreamReassembler::push_substring(const string &data, const uint64_t index, const bool eof)  {
     // 三个参数 data 是收到的数据
     // index 是 data 在完整数据中的下标
     // eof 是表示 data 是否是完整数据的最后一段
@@ -80,7 +80,7 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
 }
 
 // 这个函数只负责重组数据 返回重组成功的字节数
-size_t StreamReassembler::_push_substring(const string &data, const size_t index) {
+size_t StreamReassembler::_push_substring(const string &data, const uint64_t index) {
     if (index == nextReassembledIndex) {
         size_t numOfBytesWritten = this->_output.write(data);
         this->nextReassembledIndex += numOfBytesWritten;
