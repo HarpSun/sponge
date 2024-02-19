@@ -38,7 +38,7 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
     // 我要通过网络给你的电脑发送一段数据是 'hello'
     // 数据被拆成两个部分 he, llo
     // 那 he 部分调用这个函数的时候 参数就是 ("he", 0, false)
-    // llo 调用的时候就是 ("llo", 2, true)
+    // llo 调用的时候就是 ("llo", 2, true)，因为 l 在 hello 中下标为 2
 
     // 实现这个函数的时候要考虑如下情况
     // 1. 收到的数据有可能包含重复的 比如 he, ello
