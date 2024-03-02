@@ -17,12 +17,10 @@ class StreamReassembler {
     size_t _capacity;    //!< The maximum number of bytes
     bool receiveEof;  // 收到了完整数据的最后一段
     size_t nextReassembledIndex; // 下一个要重组的下标 比如完整数据是 hello 已经重组了 he 那么这个值就是 2
-    size_t unassembledByteSize; // 等待重组数据的大小
     map<size_t, string> unassembledMap; // 等待重组的数据 key 是下标 value 是数据, Cpp 中 map 是有序的
 
     size_t _push_substring(const std::string &data, const uint64_t index);
     void _check_eof(bool eof);
-    const string cuttedData(const string &data);
 
   public:
     //! \brief Construct a `StreamReassembler` that will store up to `capacity` bytes.

@@ -24,7 +24,6 @@ StreamReassembler::StreamReassembler(const size_t capacity) :
     _capacity(capacity),
     receiveEof(false),
     nextReassembledIndex(0),
-    unassembledByteSize(0),
     unassembledMap() {}
 
 //! \details This function accepts a substring (aka a segment) of bytes,
@@ -52,9 +51,19 @@ void StreamReassembler::push_substring(const string &data, const uint64_t index,
     // 如果大于表示这段数据是乱序的 先写入临时存储 unassebmledMap 供后续使用
     // 2. 写入 data 之后 扫描 unassebmledMap 的 key 也就是等待重组的数据段下标
     // 和 nextReassembledIndex 对比 按照 1 的逻辑写入数据
-    // 3. 检查数据是否写完 完了的话调用 end_input 标示重组完成    
+    // 3. 检查数据是否写完 完了的话调用 end_input 标示重组完成
+    bool acceptedEof = eof;
     if (not data.empty()) {
-        size_t writtedSize = _push_substring(data, index);
+        size_t unacceptedByteIndex = _output.bytes_read() + _capacity;
+        if (index >= unacceptedByteIndex) {
+            return;
+        }
+
+        if (unacceptedByteIndex - index < data.length() && eof) {
+            acceptedEof = false;
+        }
+
+        size_t writtedSize = _push_substring(data.substr(0, unacceptedByteIndex - index), index);
         if (writtedSize != 0) {
             // 如果写入了数据, 那么需要检查 unassembled 数据中是否有能够继续写入的
             // indexToBeRemoved 记录循环 unassembledMap 过程中写入成功的数据段的下标
@@ -69,7 +78,6 @@ void StreamReassembler::push_substring(const string &data, const uint64_t index,
                 // 写入数据和 data 长度一致表示 data 所有内容都成功写入了
                 if (numOfBytesWritten == d.size()) {
                     indexToBeRemoved.push_back(i);
-                    unassembledByteSize -= d.size();
                 }
             }
 
@@ -80,7 +88,7 @@ void StreamReassembler::push_substring(const string &data, const uint64_t index,
         }
     }
 
-    _check_eof(eof);
+    _check_eof(acceptedEof);
 }
 
 // 这个函数只负责重组数据 返回重组成功的字节数
@@ -90,11 +98,10 @@ void StreamReassembler::push_substring(const string &data, const uint64_t index,
 // 3. 当前 data 在待重组数据的后面，需要先加入临时存储
 size_t StreamReassembler::_push_substring(const string &data, const uint64_t index) {
     if (index == nextReassembledIndex) {
-        const string d = cuttedData(data);
-        if (d.empty()) {
+        if (data.empty()) {
             return 0;
         } else {
-            size_t numOfBytesWritten = _output.write(d);
+            size_t numOfBytesWritten = _output.write(data);
             nextReassembledIndex += numOfBytesWritten;
             return numOfBytesWritten;
         }
@@ -107,39 +114,24 @@ size_t StreamReassembler::_push_substring(const string &data, const uint64_t ind
             return data.size();
         } else {
             string s = data.substr(i, data.size());
-            const string d = cuttedData(s);
-            if (d == "") {
+            if (s == "") {
                 return 0;
             } else {
-                size_t numOfBytesWritten = _output.write(d);
+                size_t numOfBytesWritten = _output.write(s);
                 nextReassembledIndex += numOfBytesWritten;
                 return numOfBytesWritten + i;
             }
         }
     } else {
-        const string d = cuttedData(data);
-        if (d == "") {
+        if (data == "") {
             return 0;
         } else {
-            unassembledMap[index] = d;
-            unassembledByteSize += d.size();
+            unassembledMap[index] = data;
             return 0;
         }
     }
 }
 
-const string StreamReassembler::cuttedData(const string &data) {
-    // Reassembler 有容量限制，每次写入数据前先检查是否超过容量
-    // 如果超了，就对数据进行裁切，将超过的部分丢弃，剩余的内容写入
-    size_t totalSize = unassembledByteSize + _output.buffer_size();
-    size_t leftSize = _capacity - totalSize;
-    if (leftSize > data.size()) {
-        // 剩余容量足够完整的 data 写入，不用裁切
-        return data;
-    } else {
-        return data.substr(0, leftSize);
-    }    
-}
 
 void StreamReassembler::_check_eof(bool eof) {
     // 所有数据重组完之后 需要调用 end_input
