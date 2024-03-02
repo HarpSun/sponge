@@ -1,6 +1,7 @@
 #include "stream_reassembler.hh"
 
 #include <vector>
+#include <sstream>
 
 // Dummy implementation of a stream reassembler.
 
@@ -126,7 +127,13 @@ size_t StreamReassembler::_push_substring(const string &data, const uint64_t ind
         if (data == "") {
             return 0;
         } else {
-            unassembledMap[index] = data;
+            if (unassembledMap.find(index) != unassembledMap.end()) {
+                if (unassembledMap[index].length() < data.length()) {
+                    unassembledMap[index] = data;
+                }
+            } else {
+                unassembledMap[index] = data;
+            }
             return 0;
         }
     }
@@ -183,3 +190,52 @@ size_t StreamReassembler::unassembled_bytes() const {
 bool StreamReassembler::empty() const { 
     return unassembledMap.empty(); 
 }
+
+
+//int main(int argc, char* argv[]) {
+//    // argc contains the number of arguments passed to the program
+//    // argv is an array of C-style strings (char*) containing the arguments
+//
+//    size_t size = stoi(argv[1]);
+//    cout << "size of reassembler: " << size << "\n";
+//    StreamReassembler buf{size};
+//
+//    std::string input;
+//    while (true) {
+//        // Prompt the user for input
+//        std::cout << "Enter your input (type 'exit' to quit): ";
+//        std::getline(std::cin, input);
+//
+//        // Check if the input is 'exit'
+//        if (input == "exit") {
+//            std::cout << "Exiting..." << std::endl;
+//            break;
+//        }
+//
+//        // Process the input
+//        std::cout << "You entered: " << input << std::endl;
+//
+//        // Create a string stream from the input string
+//        std::istringstream iss(input);
+//
+//        // Vector to store the split substrings
+//        std::vector<std::string> tokens;
+//
+//        // Temporary string to hold each substring
+//        std::string token;
+//
+//        // Read each substring separated by space and store it in the vector
+//        while (iss >> token) {
+//            tokens.push_back(token);
+//        }
+//
+//        const string data = tokens[0];
+//        int index = stoi(tokens[1]);
+//        bool eof = stoi(tokens[2]);
+////        cout << "tokens: " << data << " " << index << " " << eof << "\n";
+//
+//        buf.push_substring(data, index, eof);
+//    }
+//
+//    return 0;
+//}
