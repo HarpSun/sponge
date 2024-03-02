@@ -133,10 +133,7 @@ const string StreamReassembler::cuttedData(const string &data) {
     // 如果超了，就对数据进行裁切，将超过的部分丢弃，剩余的内容写入
     size_t totalSize = this->unassembledByteSize + this->_output.buffer_size();
     size_t leftSize = this->_capacity - totalSize;
-    if (leftSize == 0) {
-        return "";
-    }
-    
+
     if (leftSize > data.size()) {
         // 剩余容量足够完整的 data 写入，不用裁切
         return data;
