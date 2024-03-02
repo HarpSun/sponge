@@ -54,7 +54,7 @@ void StreamReassembler::push_substring(const string &data, const uint64_t index,
     // 和 nextReassembledIndex 对比 按照 1 的逻辑写入数据
     // 3. 检查数据是否写完 完了的话调用 end_input 标示重组完成    
     if (not data.empty()) {
-        size_t writtedSize = this->_push_substring(data, index);
+        size_t writtedSize = _push_substring(data, index);
         if (writtedSize != 0) {
             // 如果写入了数据, 那么需要检查 unassembled 数据中是否有能够继续写入的
             // indexToBeRemoved 记录循环 unassembledMap 过程中写入成功的数据段的下标
@@ -62,25 +62,25 @@ void StreamReassembler::push_substring(const string &data, const uint64_t index,
             // 为什么这样做？因为循环 map 的过程中改变 map 内容会有问题
             vector<size_t> indexToBeRemoved = {};
             // 检查 unassembledMap 中的数据段是否可以继续重组
-            for (auto const& x : this->unassembledMap) {
+            for (auto const& x : unassembledMap) {
                 size_t i = x.first;
                 string d = x.second;
-                size_t numOfBytesWritten = this->_push_substring(d, i);
+                size_t numOfBytesWritten = _push_substring(d, i);
                 // 写入数据和 data 长度一致表示 data 所有内容都成功写入了
                 if (numOfBytesWritten == d.size()) {
                     indexToBeRemoved.push_back(i);
-                    this->unassembledByteSize -= d.size();
+                    unassembledByteSize -= d.size();
                 }
             }
 
             // 把重组成功的从 unassembledMap 中移除
             for (size_t i = 0; i < indexToBeRemoved.size(); i++) {
-                this->unassembledMap.erase(indexToBeRemoved[i]);
+                unassembledMap.erase(indexToBeRemoved[i]);
             }
         }
     }
 
-    this->_check_eof(eof);
+    _check_eof(eof);
 }
 
 // 这个函数只负责重组数据 返回重组成功的字节数
@@ -90,39 +90,39 @@ void StreamReassembler::push_substring(const string &data, const uint64_t index,
 // 3. 当前 data 在待重组数据的后面，需要先加入临时存储
 size_t StreamReassembler::_push_substring(const string &data, const uint64_t index) {
     if (index == nextReassembledIndex) {
-        const string d = this->cuttedData(data);
-        if (d == "") {
+        const string d = cuttedData(data);
+        if (d.empty()) {
             return 0;
         } else {
-            size_t numOfBytesWritten = this->_output.write(d);
-            this->nextReassembledIndex += numOfBytesWritten;
+            size_t numOfBytesWritten = _output.write(d);
+            nextReassembledIndex += numOfBytesWritten;
             return numOfBytesWritten;
         }
-    } else if (index < this->nextReassembledIndex) {
+    } else if (index < nextReassembledIndex) {
         // i 表示 data 不重复的部分的开始坐标
         // 如果 i >= data 的长度
         // 表示整个 data 都是重复的 那么这次收到的数据就没有什么用 直接结束重组过程
-        size_t i = this->nextReassembledIndex - index;
+        size_t i = nextReassembledIndex - index;
         if (i >= data.size()) {
             return data.size();
         } else {
             string s = data.substr(i, data.size());
-            const string d = this->cuttedData(s);
+            const string d = cuttedData(s);
             if (d == "") {
                 return 0;
             } else {
-                size_t numOfBytesWritten = this->_output.write(d);
-                this->nextReassembledIndex += numOfBytesWritten;
+                size_t numOfBytesWritten = _output.write(d);
+                nextReassembledIndex += numOfBytesWritten;
                 return numOfBytesWritten + i;
             }
         }
     } else {
-        const string d = this->cuttedData(data);
+        const string d = cuttedData(data);
         if (d == "") {
             return 0;
         } else {
-            this->unassembledMap[index] = d;
-            this->unassembledByteSize += d.size();
+            unassembledMap[index] = d;
+            unassembledByteSize += d.size();
             return 0;
         }
     }
@@ -131,9 +131,8 @@ size_t StreamReassembler::_push_substring(const string &data, const uint64_t ind
 const string StreamReassembler::cuttedData(const string &data) {
     // Reassembler 有容量限制，每次写入数据前先检查是否超过容量
     // 如果超了，就对数据进行裁切，将超过的部分丢弃，剩余的内容写入
-    size_t totalSize = this->unassembledByteSize + this->_output.buffer_size();
-    size_t leftSize = this->_capacity - totalSize;
-
+    size_t totalSize = unassembledByteSize + _output.buffer_size();
+    size_t leftSize = _capacity - totalSize;
     if (leftSize > data.size()) {
         // 剩余容量足够完整的 data 写入，不用裁切
         return data;
@@ -150,11 +149,11 @@ void StreamReassembler::_check_eof(bool eof) {
     // 1. 收到了完整数据的最后一段
     // 2. 临时存储为空
     if (eof) {
-        this->receiveEof = true;
+        receiveEof = true;
     }
 
-    if (this->receiveEof and this->unassembledMap.empty()) {
-        this->_output.end_input();
+    if (receiveEof and unassembledMap.empty()) {
+        _output.end_input();
     }
 }
 
@@ -171,7 +170,7 @@ size_t StreamReassembler::unassembled_bytes() const {
     // 如果小于或等于表示这段数据还没有计算过 直接加上
     size_t res = 0;
     size_t nextUnassembledIndex = 0;
-    for (auto const& x : this->unassembledMap) {
+    for (auto const& x : unassembledMap) {
         size_t index = x.first;
         string data = x.second;
         if (nextUnassembledIndex > index) {
@@ -190,5 +189,5 @@ size_t StreamReassembler::unassembled_bytes() const {
 }
 
 bool StreamReassembler::empty() const { 
-    return this->unassembledMap.empty(); 
+    return unassembledMap.empty(); 
 }
