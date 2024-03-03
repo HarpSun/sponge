@@ -176,14 +176,13 @@ size_t StreamReassembler::unassembled_bytes() const {
     for (auto const& x : unassembledMap) {
         size_t index = x.first;
         string data = x.second;
-        if (nextUnassembledIndex > index) {
-            size_t i = nextUnassembledIndex - index;
-            if (i < data.size()) {
-                string s = data.substr(i, data.size());
-                res += s.size();
-                nextUnassembledIndex += s.size();
-            }
-            // else 上一个 data 包含了当前的
+        if (index + data.size() <= nextUnassembledIndex) {
+            // 数据是完全重复的
+            continue;
+        } else if (index <= nextUnassembledIndex) {
+            string s = data.substr(index, data.size());
+            res += s.size();
+            nextUnassembledIndex += s.size();
         } else {
             res += data.size();
             nextUnassembledIndex = index + data.size();
