@@ -19,8 +19,12 @@ class StreamReassembler {
     size_t nextReassembledIndex; // 下一个要重组的下标 比如完整数据是 hello 已经重组了 he 那么这个值就是 2
     map<size_t, string> unassembledMap; // 等待重组的数据 key 是下标 value 是数据, Cpp 中 map 是有序的
 
-    size_t _push_substring(const std::string &data, const uint64_t index);
-    void _check_eof(bool eof);
+    void reassemble_data(const string &data, const uint64_t index);
+    void write_deliverable_cache();
+    void write_data(const string &data, const uint64_t index);
+    void cache_data(const string &data, const uint64_t index);
+    void set_end_input(bool eof);
+    void _log_internal_status();
 
   public:
     //! \brief Construct a `StreamReassembler` that will store up to `capacity` bytes.
