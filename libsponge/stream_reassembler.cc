@@ -61,7 +61,7 @@ void StreamReassembler::push_substring(const string &data, const uint64_t index,
     // 如果数据只有一部分超过了，那么要对数据进行切割
     size_t unacceptedByteIndex = _output.bytes_read() + _capacity;
     size_t remainCapacity = unacceptedByteIndex - index;
-    if (not data.empty() and remainCapacity > 0) {
+    if (not data.empty() and unacceptedByteIndex > index) {
         const string d = data.substr(0, remainCapacity);
         reassemble_data(d, index);
     }
