@@ -60,8 +60,8 @@ void StreamReassembler::push_substring(const string &data, const uint64_t index,
     // unacceptedByteIndex 就是第一个超过窗口尺寸的 sequence number (tcp 中就是 index)
     // 如果数据只有一部分超过了，那么要对数据进行切割
     size_t unacceptedByteIndex = _output.bytes_read() + _capacity;
-    size_t remainCapacity = unacceptedByteIndex - index;
-    if (not data.empty() and unacceptedByteIndex > index) {
+    uint64_t remainCapacity = static_cast<int>(unacceptedByteIndex) - index;
+    if (not data.empty() and remainCapacity > 0) {
         const string d = data.substr(0, remainCapacity);
         reassemble_data(d, index);
     }
