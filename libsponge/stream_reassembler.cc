@@ -23,8 +23,8 @@ using namespace std;
 StreamReassembler::StreamReassembler(const size_t capacity) :
     _output(capacity),
     _capacity(capacity),
-    receiveEof(false),
     unassembledMap(),
+    receiveEof(false),
     nextReassembledIndex(0) {}
 
 //! \details This function accepts a substring (aka a segment) of bytes,
@@ -179,7 +179,7 @@ size_t StreamReassembler::unassembled_bytes() const {
         if (index + data.size() <= nextUnassembledIndex) {
             // 数据是完全重复的
             continue;
-        } else if (index <= nextUnassembledIndex) {
+        } else if (index < nextUnassembledIndex) {
             string s = data.substr(index, data.size());
             res += s.size();
             nextUnassembledIndex += s.size();

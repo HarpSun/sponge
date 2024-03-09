@@ -15,7 +15,6 @@ class StreamReassembler {
 
     ByteStream _output;  //!< The reassembled in-order byte stream
     size_t _capacity;    //!< The maximum number of bytes
-    bool receiveEof;  // 收到了完整数据的最后一段
     map<size_t, string> unassembledMap; // 等待重组的数据 key 是下标 value 是数据, Cpp 中 map 是有序的
 
     void reassemble_data(const string &data, const uint64_t index);
@@ -26,6 +25,7 @@ class StreamReassembler {
     void _log_internal_status();
 
   public:
+    bool receiveEof;  // 收到了完整数据的最后一段
     size_t nextReassembledIndex; // 下一个要重组的下标 比如完整数据是 hello 已经重组了 he 那么这个值就是 2
 
     //! \brief Construct a `StreamReassembler` that will store up to `capacity` bytes.

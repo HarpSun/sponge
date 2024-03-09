@@ -26,20 +26,45 @@ payload 就是需要重组的数据
 也就是 reassembler 当中的 capacity 的范围
 */
 void TCPReceiver::segment_received(const TCPSegment &seg) {
-    TCPHeader header = seg.header();
-    cout << "header: " << header.seqno << endl;
-
-    if (not _isn.has_value() and not header.syn) {
-        return;
+    // cout << "header: " << seg.header().seqno << "syn: " << seg.header().syn << endl;
+    // cout << "payload: " << seg.payload().size() << " " << seg.payload().str() << endl;
+    if (status == LISTEN) {
+        handle_listen(seg);
     }
-    if (header.syn) {
-        _isn = header.seqno;
-    } else {
-        uint64_t  checkpoint = _reassembler.nextReassembledIndex;
-        uint64_t index = unwrap(seg.header().seqno, _isn.value(), checkpoint);
-        _reassembler.push_substring(seg.payload().copy(), index, header.fin);
+
+    if (status == SYN_RECV) {
+        handle_syn_recv(seg);
+    }
+
+    if (status == FIN_RECV) {
+        // ?
     }
 }
+
+void TCPReceiver::handle_listen(const TCPSegment &seg) {
+    TCPHeader header = seg.header();
+    if (header.syn) {
+        _isn = header.seqno;
+        status = SYN_RECV;
+    }
+}
+
+void TCPReceiver::handle_syn_recv(const TCPSegment &seg) {
+    TCPHeader header = seg.header();
+    const Buffer& payload = seg.payload();
+
+    // syn 不是 stream 的一部分，如果一个 segment 中既包含 syn 和 stream data，那么需要先将 seqno + 1
+    WrappingInt32 seqno = header.syn? header.seqno + 1 : header.seqno;
+    uint64_t checkpoint = _reassembler.nextReassembledIndex;
+    uint64_t absolute_seqno = unwrap(seqno, _isn.value(), checkpoint);
+    uint64_t stream_index = absolute_seqno - 1;
+    // cout << "stream_index: " << stream_index << endl;
+    _reassembler.push_substring(payload.copy(), stream_index, header.fin);
+    if (stream_out().input_ended()) {
+        status = FIN_RECV;
+    }
+}
+
 
 /*
 返回 reassembler 下一个要重组的字节 结果是一个 tcp 序列号
@@ -47,14 +72,19 @@ void TCPReceiver::segment_received(const TCPSegment &seg) {
 所以没有接收到 SYN 之前 这个函数返回空
  */
 optional<WrappingInt32> TCPReceiver::ackno() const {
-    cout << "ackno: " << _isn.has_value() << endl;
-    if (not _isn.has_value()) {
+    if (status == LISTEN) {
         return nullopt;
+    } else if (status == SYN_RECV) {
+        uint64_t dataIndex = _reassembler.nextReassembledIndex;
+        return wrap(dataIndex + 1, _isn.value());
     } else {
-        return wrap(_reassembler.nextReassembledIndex, _isn.value());
+        // FIN_RECV
+        uint64_t dataIndex = _reassembler.nextReassembledIndex;
+        return wrap(dataIndex + 2, _isn.value());
     }
 }
 
 size_t TCPReceiver::window_size() const {
-    return _capacity;
+    // 窗口
+    return _capacity - stream_out().buffer_size();
 }
