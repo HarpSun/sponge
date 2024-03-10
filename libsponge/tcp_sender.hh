@@ -34,6 +34,10 @@ class TCPSender {
     // 记录 receiver 发送过来的关键数据
     optional<WrappingInt32> _ackno;
     uint16_t _window_size{0};
+    uint64_t _bytes_in_flight{0};
+
+    TCPSegment make_segment(size_t payload_size, WrappingInt32 seqno, bool syn=false, bool fin=false);
+    void _fill_window(uint16_t window_size);
 
   public:
     //! Initialize a TCPSender

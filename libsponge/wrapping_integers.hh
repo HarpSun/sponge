@@ -51,6 +51,8 @@ inline bool operator==(WrappingInt32 a, WrappingInt32 b) { return a.raw_value() 
 
 inline bool operator<(WrappingInt32 a, WrappingInt32 b) { return a.raw_value() < b.raw_value(); }
 
+inline bool operator>(WrappingInt32 a, WrappingInt32 b) { return a.raw_value() > b.raw_value(); }
+
 //! \brief Whether the two integers are not equal.
 inline bool operator!=(WrappingInt32 a, WrappingInt32 b) { return !(a == b); }
 

@@ -23,15 +23,76 @@ TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const s
     , _stream(capacity)
     , _ackno(nullopt) {}
 
-uint64_t TCPSender::bytes_in_flight() const { return {}; }
+uint64_t TCPSender::bytes_in_flight() const {
+    return _bytes_in_flight;
+}
 
 void TCPSender::fill_window() {
-//    stream_in().read()
     size_t buffer_size = stream_in().buffer_size();
     size_t max_payload_size = TCPConfig::MAX_PAYLOAD_SIZE;
     size_t payload_size = min(buffer_size, max_payload_size);
-    cout << payload_size;
+    cout << "payload_size: " << payload_size << endl;
+    cout << "next_seqno: " << next_seqno_absolute() << " bytes_flight: " << bytes_in_flight() << endl;
+    // closed
+    if (next_seqno_absolute() == 0) {
+        cout << "closed" << endl;
+        TCPSegment segment = make_segment(0, wrap(0, _isn), true);
+        segments_out().emplace(segment);
+        _next_seqno = 1;
+        _bytes_in_flight = 1;
+    }
+
+    // syn_acked
+    if (next_seqno_absolute() > bytes_in_flight() and not stream_in().eof()) {
+        cout << "syn_acked" << endl;
+        _fill_window(_window_size);
+    } else if (stream_in().eof() and next_seqno_absolute() == stream_in().bytes_written() + 1) {
+        cout << "fin_sent" << endl;
+        if (_window_size > 0) {
+            TCPSegment segment = make_segment(0, wrap(next_seqno_absolute(), _isn), false, true);
+            segments_out().emplace(segment);
+            _next_seqno += 1;
+            _bytes_in_flight = 1;
+        }
+    }
+}
+
+void TCPSender::_fill_window(uint16_t window_size) {
+    if (window_size == 0 or stream_in().buffer_size() == 0) {
+        return;
+    } else {
+        size_t buffer_size = stream_in().buffer_size();
+        size_t max_payload_size = TCPConfig::MAX_PAYLOAD_SIZE;
+        size_t payload_size = min(
+            min(buffer_size, max_payload_size),
+            static_cast<size_t>(window_size)
+            );
+        TCPSegment segment = make_segment(payload_size, wrap(next_seqno_absolute(), _isn));
+        segment.print_tcp_segment();
+        segments_out().emplace(segment);
+        _next_seqno += segment.length_in_sequence_space();
+        _fill_window(window_size - payload_size);
+    }
+}
+
+/*
+生成要发送的 TCP 包
+*/
+TCPSegment TCPSender::make_segment(size_t payload_size, WrappingInt32 seqno, bool syn, bool fin) {
     TCPSegment segment = TCPSegment();
+    string payload = stream_in().read(payload_size);
+    cout << "__log1: " << payload << endl;
+    segment.payload() = std::string(payload);
+    segment.print_tcp_segment();
+    segment.header().seqno = seqno;
+    if (syn) {
+        segment.header().syn = true;
+    }
+
+    if (fin) {
+        segment.header().fin = true;
+    }
+    return segment;
 }
 
 /*
@@ -44,21 +105,25 @@ void TCPSender::fill_window() {
 //! \param ackno The remote receiver's ackno (acknowledgment number)
 //! \param window_size The remote receiver's advertised window size
 void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_size) {
-    _ackno = ackno;
-    _window_size = window_size;
-
-    if (segments_out().empty()) {
+    if (ackno > wrap(next_seqno_absolute(), _isn)) {
+        // acked segno not sent!
         return;
     }
 
-    // not empty
-    TCPSegment seg = segments_out().front();
-    while (seg.header().seqno < ackno) {
-        segments_out().pop();
-        if (segments_out().empty()) {
-            break;
+    _window_size = window_size;
+    // _next_seqno = unwrap(ackno, _isn, next_seqno_absolute());
+    _bytes_in_flight = wrap(next_seqno_absolute(), _isn) - ackno;
+
+    size_t queue_length = segments_out().size();
+    for (size_t i = 0; i < queue_length; i++) {
+        TCPSegment seg = segments_out().front();
+        if (seg.header().seqno + seg.length_in_sequence_space() - ackno <= 0) {
+            // has been acked
+            segments_out().pop();
+        } else {
+            segments_out().pop();
+            segments_out().emplace(seg);
         }
-        seg = segments_out().front();
     }
 }
 
