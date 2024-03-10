@@ -4,6 +4,7 @@
 #include "util.hh"
 
 #include <variant>
+#include <iostream>
 
 using namespace std;
 
@@ -24,6 +25,15 @@ ParseResult TCPSegment::parse(const Buffer buffer, const uint32_t datagram_layer
 
 size_t TCPSegment::length_in_sequence_space() const {
     return payload().str().size() + (header().syn ? 1 : 0) + (header().fin ? 1 : 0);
+}
+
+void TCPSegment::print_tcp_segment() const {
+    cout << "======= TCPSegment =========" << endl;
+    cout << "header: " << header().seqno << " syn: " << header().syn << " fin: " << header().fin
+         << " seqno: " << header().seqno << " ackno: " << header().ackno << " checksum: " << header().cksum
+         << " window_size:" << header().win << endl;
+    cout << "payload: " << payload().size() << " " << payload().str() << endl;
+    cout << "======= END =========" << endl;
 }
 
 //! \param[in] datagram_layer_checksum pseudo-checksum from the lower-layer protocol

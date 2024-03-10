@@ -55,7 +55,7 @@ llo 调用的时候就是 ("llo", 2, true)，因为 l 在 hello 中下标为 2
 3. 检查数据是否写完 完了的话调用 end_input 标示重组完成
  */
 void StreamReassembler::push_substring(const string &data, const uint64_t index, const bool eof)  {
-    // _capacity 就是 tcp 协议的所谓滑动窗口的大小，左边是：已被上层读取的数据大小，右边是：已被上层读取的数据 + _capacity
+    // _capacity 就是 reassembler 所能容纳的字节大小，左边是：已被上层读取的数据大小，右边是：已被上层读取的数据 + _capacity
     // 随着重组和读取进行，窗口向右滑动
     // unacceptedByteIndex 就是第一个超过窗口尺寸的 sequence number (tcp 中就是 index)
     // 如果数据只有一部分超过了，那么要对数据进行切割

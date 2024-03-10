@@ -26,8 +26,6 @@ payload 就是需要重组的数据
 也就是 reassembler 当中的 capacity 的范围
 */
 void TCPReceiver::segment_received(const TCPSegment &seg) {
-    // cout << "header: " << seg.header().seqno << "syn: " << seg.header().syn << endl;
-    // cout << "payload: " << seg.payload().size() << " " << seg.payload().str() << endl;
     if (status == LISTEN) {
         handle_listen(seg);
     }
@@ -42,6 +40,7 @@ void TCPReceiver::segment_received(const TCPSegment &seg) {
 }
 
 void TCPReceiver::handle_listen(const TCPSegment &seg) {
+    // seg.print_tcp_segment();
     TCPHeader header = seg.header();
     if (header.syn) {
         _isn = header.seqno;

@@ -31,6 +31,9 @@ class TCPSender {
 
     //! the (absolute) sequence number for the next byte to be sent
     uint64_t _next_seqno{0};
+    // 记录 receiver 发送过来的关键数据
+    optional<WrappingInt32> _ackno;
+    uint16_t _window_size{0};
 
   public:
     //! Initialize a TCPSender
@@ -66,7 +69,7 @@ class TCPSender {
     //! \brief How many sequence numbers are occupied by segments sent but not yet acknowledged?
     //! \note count is in "sequence space," i.e. SYN and FIN each count for one byte
     //! (see TCPSegment::length_in_sequence_space())
-    size_t bytes_in_flight() const;
+    uint64_t bytes_in_flight() const;
 
     //! \brief Number of consecutive retransmissions that have occurred in a row
     unsigned int consecutive_retransmissions() const;
