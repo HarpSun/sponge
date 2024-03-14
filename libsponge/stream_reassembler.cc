@@ -87,11 +87,11 @@ void StreamReassembler::reassemble_data(const string &data, const uint64_t index
     if (index + data.size() <= nextReassembledIndex) {
         // 数据是完全重复的
         return;
-    } else if (index <= nextReassembledIndex) {
+    } else if (index > nextReassembledIndex) {
+        cache_data(data, index);
+    } else {
         write_data(data, index);
         write_deliverable_cache();
-    } else {
-        cache_data(data, index);
     }
 }
 
@@ -108,11 +108,11 @@ void StreamReassembler::write_deliverable_cache() {
         if (i + d.size() <= nextReassembledIndex) {
             // 数据是完全重复的
             indexToBeRemoved.push_back(i);
-        } else if (i <= nextReassembledIndex) {
+        } else if (i > nextReassembledIndex) {
+            break;
+        } else {
             write_data(d, i);
             indexToBeRemoved.push_back(i);
-        } else {
-            break;
         }
     }
 
