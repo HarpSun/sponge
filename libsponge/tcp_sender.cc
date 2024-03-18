@@ -27,6 +27,12 @@ uint64_t TCPSender::bytes_in_flight() const {
     return _bytes_in_flight;
 }
 
+/*
+ fill_window 负责发送数据到 segments_out 队列中
+ 为了充分利用带宽，我们会一次发送多个包，每个包的大小不超过 MAX_PAYLOAD_SIZE
+ 包的数量和的大小取决于 receiver 的 window 大小
+
+ */
 void TCPSender::fill_window() {
     size_t buffer_size = stream_in().buffer_size();
     size_t max_payload_size = TCPConfig::MAX_PAYLOAD_SIZE;
