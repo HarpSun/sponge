@@ -36,11 +36,14 @@ class TCPSender {
     uint16_t _window_size{0};
     uint64_t _bytes_in_flight{0};
 
-    TCPSegment make_segment(size_t payload_size, WrappingInt32 seqno, bool syn=false, bool fin=false);
-    void _fill_window(uint16_t window_size);
+    TCPSegment make_segment(size_t payload_size, WrappingInt32 seqno);
+    void remove_acknowledged_segments(const WrappingInt32 ackno);
+    void _fill_window();
     bool closed() const;
     bool syn_sent() const;
     bool syn_acked() const;
+    bool fin_sent() const;
+    bool fin_acked() const;
 
   public:
     //! Initialize a TCPSender

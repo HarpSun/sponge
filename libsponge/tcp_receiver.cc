@@ -77,6 +77,7 @@ void TCPReceiver::handle_syn_recv(const TCPSegment &seg) {
 返回 reassembler 下一个要重组的字节 结果是一个 tcp 序列号
 序列号是从 SYN 开始的
 所以没有接收到 SYN 之前 这个函数返回空
+要注意 SYN 和 FIN 也各占一个序列号
  */
 optional<WrappingInt32> TCPReceiver::ackno() const {
     if (listen()) {
