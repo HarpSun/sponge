@@ -8,12 +8,6 @@
 
 #include <optional>
 
-enum ReceiverStatus {
-    LISTEN,
-    SYN_RECV,
-    FIN_RECV,
-};
-
 //! \brief The "receiver" part of a TCP implementation.
 
 //! Receives and reassembles segments into a ByteStream, and computes
@@ -25,10 +19,14 @@ class TCPReceiver {
     //! The maximum number of bytes we'll store.
     size_t _capacity;
     std::optional<WrappingInt32> _isn;
-    ReceiverStatus status;
 
     void handle_listen(const TCPSegment &seg);
     void handle_syn_recv(const TCPSegment &seg);
+
+    // receiver 的状态
+    bool listen() const;
+    bool syn_recv() const;
+    bool fin_recv() const;
 
   public:
     //! \brief Construct a TCP receiver
@@ -38,8 +36,7 @@ class TCPReceiver {
     TCPReceiver(const size_t capacity) :
         _reassembler(capacity),
         _capacity(capacity),
-        _isn(nullopt),
-        status(LISTEN) {}
+        _isn(nullopt) {}
 
     //! \name Accessors to provide feedback to the remote TCPSender
     //!@{

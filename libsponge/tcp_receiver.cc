@@ -23,28 +23,39 @@ payload 就是需要重组的数据
 
 关于窗口
 窗口是一个比喻 表示一个范围 这个范围是接收端可以接收的数据大小
-也就是 reassembler 当中的 capacity 的范围
-*/
+具体来说：receiver 的 capacity 它决定了窗口的右边界
+nextReassembledIndex 决定了窗口的左边界
+窗口的变化可以分两种情况：
+ 1. 当 receiver 重组数据之后更新 ACK 的值时，窗口左边界会向右移动
+ 2. 当 receiver buffer 存储的数据被上层应用读取之后，释放了空间，窗口右边界会向右移动
+ */
 void TCPReceiver::segment_received(const TCPSegment &seg) {
-    if (status == LISTEN) {
+    if (listen()) {
         handle_listen(seg);
     }
 
-    if (status == SYN_RECV) {
+    if (syn_recv()) {
         handle_syn_recv(seg);
     }
 
-    if (status == FIN_RECV) {
+    if (fin_recv()) {
         // ?
     }
 }
+
+/*
+ receiver 的状态
+ */
+bool TCPReceiver::listen() const { return _isn == nullopt; }
+bool TCPReceiver::syn_recv() const { return _isn != nullopt and not stream_out().input_ended(); }
+bool TCPReceiver::fin_recv() const { return stream_out().input_ended(); }
+
 
 void TCPReceiver::handle_listen(const TCPSegment &seg) {
     // seg.print_tcp_segment();
     TCPHeader header = seg.header();
     if (header.syn) {
         _isn = header.seqno;
-        status = SYN_RECV;
     }
 }
 
@@ -59,9 +70,6 @@ void TCPReceiver::handle_syn_recv(const TCPSegment &seg) {
     uint64_t stream_index = absolute_seqno - 1;
     // cout << "stream_index: " << stream_index << endl;
     _reassembler.push_substring(payload.copy(), stream_index, header.fin);
-    if (stream_out().input_ended()) {
-        status = FIN_RECV;
-    }
 }
 
 
@@ -71,9 +79,9 @@ void TCPReceiver::handle_syn_recv(const TCPSegment &seg) {
 所以没有接收到 SYN 之前 这个函数返回空
  */
 optional<WrappingInt32> TCPReceiver::ackno() const {
-    if (status == LISTEN) {
+    if (listen()) {
         return nullopt;
-    } else if (status == SYN_RECV) {
+    } else if (syn_recv()) {
         uint64_t dataIndex = _reassembler.nextReassembledIndex;
         return wrap(dataIndex + 1, _isn.value());
     } else {

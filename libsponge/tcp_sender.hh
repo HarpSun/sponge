@@ -38,6 +38,9 @@ class TCPSender {
 
     TCPSegment make_segment(size_t payload_size, WrappingInt32 seqno, bool syn=false, bool fin=false);
     void _fill_window(uint16_t window_size);
+    bool closed() const;
+    bool syn_sent() const;
+    bool syn_acked() const;
 
   public:
     //! Initialize a TCPSender

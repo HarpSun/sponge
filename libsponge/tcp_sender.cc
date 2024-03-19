@@ -28,10 +28,16 @@ uint64_t TCPSender::bytes_in_flight() const {
 }
 
 /*
+ 获取 sender 的状态
+ */
+bool TCPSender::closed() const { return next_seqno_absolute() == 0; }
+bool TCPSender::syn_sent() const { return next_seqno_absolute() > 0 and next_seqno_absolute() == bytes_in_flight(); }
+bool TCPSender::syn_acked() const { return next_seqno_absolute() > bytes_in_flight() and not stream_in().eof(); }
+
+/*
  fill_window 负责发送数据到 segments_out 队列中
  为了充分利用带宽，我们会一次发送多个包，每个包的大小不超过 MAX_PAYLOAD_SIZE
  包的数量和的大小取决于 receiver 的 window 大小
-
  */
 void TCPSender::fill_window() {
     size_t buffer_size = stream_in().buffer_size();
@@ -39,8 +45,8 @@ void TCPSender::fill_window() {
     size_t payload_size = min(buffer_size, max_payload_size);
     cout << "payload_size: " << payload_size << endl;
     cout << "next_seqno: " << next_seqno_absolute() << " bytes_flight: " << bytes_in_flight() << endl;
-    // closed
-    if (next_seqno_absolute() == 0) {
+
+    if (closed()) {
         cout << "closed" << endl;
         TCPSegment segment = make_segment(0, wrap(0, _isn), true);
         segments_out().emplace(segment);
@@ -48,8 +54,7 @@ void TCPSender::fill_window() {
         _bytes_in_flight = 1;
     }
 
-    // syn_acked
-    if (next_seqno_absolute() > bytes_in_flight() and not stream_in().eof()) {
+    if (syn_acked()) {
         cout << "syn_acked" << endl;
         _fill_window(_window_size);
     } else if (stream_in().eof() and next_seqno_absolute() == stream_in().bytes_written() + 1) {
