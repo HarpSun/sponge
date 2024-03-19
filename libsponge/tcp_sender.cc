@@ -157,11 +157,6 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
 unsigned int TCPSender::consecutive_retransmissions() const { return {}; }
 
 void TCPSender::send_empty_segment() {
-    if (_ackno.has_value()) {
-        TCPHeader header = TCPHeader();
-        header.seqno = _ackno.value();
-        TCPSegment seg = TCPSegment();
-        seg.header() = header;
-        segments_out().emplace(seg);
-    }
+    TCPSegment seg = make_segment(0, wrap(next_seqno_absolute(), _isn));
+    segments_out().emplace(seg);
 }
