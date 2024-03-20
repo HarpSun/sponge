@@ -22,9 +22,14 @@ class TCPSender {
 
     //! outbound queue of segments that the TCPSender wants sent
     std::queue<TCPSegment> _segments_out{};
+    std::queue<TCPSegment> _outstanding_segments{};
 
     //! retransmission timer for the connection
     unsigned int _initial_retransmission_timeout;
+    unsigned int _retransmission_timeout;
+    bool timer_running{false};
+    size_t uptime{0};
+    size_t _consecutive_retransmissions{0};
 
     //! outgoing stream of bytes that have not yet been sent
     ByteStream _stream;
@@ -37,7 +42,7 @@ class TCPSender {
     uint64_t _bytes_in_flight{0};
 
     TCPSegment make_segment(size_t payload_size, WrappingInt32 seqno);
-    void remove_acknowledged_segments(const WrappingInt32 ackno);
+    void remove_acknowledged_segments(const WrappingInt32 ackno, queue<TCPSegment> &segments_out);
     void _fill_window();
     bool closed() const;
     bool syn_sent() const;

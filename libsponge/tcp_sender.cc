@@ -20,6 +20,7 @@ using namespace std;
 TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const std::optional<WrappingInt32> fixed_isn)
     : _isn(fixed_isn.value_or(WrappingInt32{random_device()()}))
     , _initial_retransmission_timeout{retx_timeout}
+    , _retransmission_timeout{retx_timeout}
     , _stream(capacity)
     , _ackno(nullopt) {}
 
@@ -59,6 +60,11 @@ void TCPSender::fill_window() {
         // 还没建立连接的时候，还不知道对面的 window_size，所以就只发送一个 SYN
         TCPSegment segment = make_segment(0, wrap(0, _isn));
         segments_out().emplace(segment);
+        _outstanding_segments.push(segment);
+        if (not timer_running) {
+            timer_running = true;
+            uptime = 0;
+        }
         _next_seqno = 1;
         _bytes_in_flight = 1;
     } else if (syn_sent() or syn_acked()) {
@@ -71,6 +77,7 @@ void TCPSender::fill_window() {
 
 void TCPSender::_fill_window() {
     size_t max_payload_size = TCPConfig::MAX_PAYLOAD_SIZE;
+    _window_size = _window_size == 0 ? 1 : _window_size;
     while (_window_size > 0 and not fin_sent()) {
         size_t buffer_size = stream_in().buffer_size();
         size_t payload_size = min(
@@ -86,10 +93,16 @@ void TCPSender::_fill_window() {
 
         TCPSegment segment = make_segment(payload_size, wrap(next_seqno_absolute(), _isn));
         segments_out().emplace(segment);
+        _outstanding_segments.push(segment);
+        if (not timer_running) {
+            timer_running = true;
+            uptime = 0;
+        }
 
         _next_seqno += segment.length_in_sequence_space();
         _bytes_in_flight += segment.length_in_sequence_space();
         _window_size -= segment.length_in_sequence_space();
+        _window_size = _window_size == 0 ? 1 : _window_size;
     }
 }
 
@@ -99,7 +112,7 @@ void TCPSender::_fill_window() {
 TCPSegment TCPSender::make_segment(size_t payload_size, WrappingInt32 seqno) {
     TCPSegment segment = TCPSegment();
     string payload = stream_in().read(payload_size);
-    cout << "__log1: " << payload << endl;
+     cout << "__log1: " << payload << endl;
     segment.payload() = std::string(payload);
     segment.header().seqno = seqno;
 
@@ -107,10 +120,11 @@ TCPSegment TCPSender::make_segment(size_t payload_size, WrappingInt32 seqno) {
         segment.header().syn = true;
     }
 
-    if (stream_in().eof()) {
+    // fin 也占用 window 1 个字节
+    if (stream_in().eof() and _window_size >= payload_size + 1) {
         segment.header().fin = true;
     }
-    segment.print_tcp_segment();
+     segment.print_tcp_segment();
     return segment;
 }
 
@@ -129,32 +143,62 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
         return;
     }
 
-    _window_size = window_size;
-    _bytes_in_flight = wrap(next_seqno_absolute(), _isn) - ackno;
-    remove_acknowledged_segments(ackno);
+    _ackno = ackno;
+    size_t unacked_bytes = wrap(next_seqno_absolute(), _isn) - ackno;
+    if (unacked_bytes < _bytes_in_flight) {
+        // reset timer
+        uptime = 0;
+        _retransmission_timeout = _initial_retransmission_timeout;
+        _consecutive_retransmissions = 0;
+    }
+
+    // 已经发送但是还没有被确认的数据也占用 window，所以要扣除
+    _window_size = window_size - unacked_bytes;
+    _bytes_in_flight = unacked_bytes;
+    remove_acknowledged_segments(ackno, segments_out());
+    remove_acknowledged_segments(ackno, _outstanding_segments);
     fill_window();
 }
 
-void TCPSender::remove_acknowledged_segments(const WrappingInt32 ackno) {
-    size_t queue_length = segments_out().size();
+void TCPSender::remove_acknowledged_segments(const WrappingInt32 ackno, queue<TCPSegment> &segments_out) {
+    size_t queue_length = segments_out.size();
     for (size_t i = 0; i < queue_length; i++) {
-        TCPSegment seg = segments_out().front();
+        TCPSegment seg = segments_out.front();
         if (seg.header().seqno + seg.length_in_sequence_space() - ackno <= 0) {
             // has been acked
-            segments_out().pop();
+            segments_out.pop();
         } else {
-            segments_out().pop();
-            segments_out().emplace(seg);
+            segments_out.pop();
+            segments_out.emplace(seg);
         }
     }
 }
 
 //! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method
 void TCPSender::tick(const size_t ms_since_last_tick) {
-    DUMMY_CODE(ms_since_last_tick);
+    uptime += ms_since_last_tick;
+    if (_outstanding_segments.empty()) {
+        return;
+    } else {
+        cout << "uptime: " << uptime << " retransmission_timeout: " << _retransmission_timeout << endl;
+        TCPSegment segment = _outstanding_segments.front();
+        if (segment.length_in_sequence_space() > _window_size and not syn_sent()) {
+            return;
+        }
+
+        if (uptime >= _retransmission_timeout) {
+            cout << "retransmission" << endl;
+            segments_out().emplace(segment);
+            _consecutive_retransmissions += 1;
+            _retransmission_timeout *= 2;
+
+            // reset
+            uptime = 0;
+        }
+    }
 }
 
-unsigned int TCPSender::consecutive_retransmissions() const { return {}; }
+unsigned int TCPSender::consecutive_retransmissions() const { return _consecutive_retransmissions; }
 
 void TCPSender::send_empty_segment() {
     TCPSegment seg = make_segment(0, wrap(next_seqno_absolute(), _isn));
