@@ -77,7 +77,8 @@ void TCPSender::fill_window() {
 
 void TCPSender::_fill_window() {
     size_t max_payload_size = TCPConfig::MAX_PAYLOAD_SIZE;
-    _window_size = _window_size == 0 ? 1 : _window_size;
+    cout << "window_size: " << _window_size << endl;
+    _window_size = _window_size == 0 and not syn_sent() ? 1 : _window_size;
     while (_window_size > 0 and not fin_sent()) {
         size_t buffer_size = stream_in().buffer_size();
         size_t payload_size = min(
@@ -102,7 +103,7 @@ void TCPSender::_fill_window() {
         _next_seqno += segment.length_in_sequence_space();
         _bytes_in_flight += segment.length_in_sequence_space();
         _window_size -= segment.length_in_sequence_space();
-        _window_size = _window_size == 0 ? 1 : _window_size;
+//        _window_size = _window_size == 0 ? 1 : _window_size;
     }
 }
 
@@ -124,7 +125,7 @@ TCPSegment TCPSender::make_segment(size_t payload_size, WrappingInt32 seqno) {
     if (stream_in().eof() and _window_size >= payload_size + 1) {
         segment.header().fin = true;
     }
-     segment.print_tcp_segment();
+    // segment.print_tcp_segment();
     return segment;
 }
 
@@ -138,8 +139,10 @@ TCPSegment TCPSender::make_segment(size_t payload_size, WrappingInt32 seqno) {
 //! \param ackno The remote receiver's ackno (acknowledgment number)
 //! \param window_size The remote receiver's advertised window size
 void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_size) {
+    cout << "ack_received: " << ackno << " window_size: " << window_size << endl;
     if (ackno > wrap(next_seqno_absolute(), _isn)) {
         // ackno 是 sender 没有发送过的数据，不应该出现这种情况
+        cout << "ackno > next_seqno_absolute()!" << endl;
         return;
     }
 
@@ -153,6 +156,7 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     }
 
     // 已经发送但是还没有被确认的数据也占用 window，所以要扣除
+    cout << "window_size: " << window_size << " unacked_bytes: " << unacked_bytes << endl;
     _window_size = window_size - unacked_bytes;
     _bytes_in_flight = unacked_bytes;
     remove_acknowledged_segments(ackno, segments_out());
