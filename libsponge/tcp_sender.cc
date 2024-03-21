@@ -20,8 +20,7 @@ using namespace std;
 TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const std::optional<WrappingInt32> fixed_isn)
     : _isn(fixed_isn.value_or(WrappingInt32{random_device()()}))
     , retx_timer(retx_timeout)
-    , _stream(capacity)
-    , _ackno(nullopt) {}
+    , _stream(capacity) {}
 
 uint64_t TCPSender::bytes_in_flight() const {
     return _bytes_in_flight;
@@ -57,7 +56,8 @@ bool TCPSender::fin_acked() const {
  */
 void TCPSender::fill_window() {
     if (closed()) {
-        _send_syn();
+        // 还没建立连接的时候，还不知道对面的 window_size，所以就只发送一个 SYN
+        send_segment(0);
     } else if (syn_acked()) {
         _fill_window();
     } else {
@@ -65,18 +65,6 @@ void TCPSender::fill_window() {
         // fin_sent 同理，等着回包
         // fin_acked 就结束发送了
     }
-}
-
-void TCPSender::_send_syn() {
-    // 还没建立连接的时候，还不知道对面的 window_size，所以就只发送一个 SYN
-    TCPSegment segment = make_segment(0, wrap(0, _isn));
-    segments_out().emplace(segment);
-    _outstanding_segments.push(segment);
-    if (not retx_timer.running()) {
-        retx_timer.start();
-    }
-    _next_seqno = 1;
-    _bytes_in_flight = 1;
 }
 
 void TCPSender::_fill_window() {
@@ -93,18 +81,20 @@ void TCPSender::_fill_window() {
             // buffer 是空的，但是还没有写完所有数据
             break;
         }
-
-        TCPSegment segment = make_segment(payload_size, wrap(next_seqno_absolute(), _isn));
-        segments_out().emplace(segment);
-        _outstanding_segments.push(segment);
-        if (not retx_timer.running()) {
-            retx_timer.start();
-        }
-
-        _next_seqno += segment.length_in_sequence_space();
-        _bytes_in_flight += segment.length_in_sequence_space();
-        _sender_window_size -= segment.length_in_sequence_space();
+        send_segment(payload_size);
     }
+}
+
+void TCPSender::send_segment(size_t payload_size) {
+    TCPSegment segment = make_segment(payload_size, wrap(next_seqno_absolute(), _isn));
+    segments_out().emplace(segment);
+    _outstanding_segments.push(segment);
+    if (not retx_timer.running()) {
+        retx_timer.start();
+    }
+    _next_seqno += segment.length_in_sequence_space();
+    _bytes_in_flight += segment.length_in_sequence_space();
+    _sender_window_size = _sender_window_size > 0 ? _sender_window_size - segment.length_in_sequence_space() : 0;
 }
 
 /*
@@ -140,33 +130,36 @@ TCPSegment TCPSender::make_segment(size_t payload_size, WrappingInt32 seqno) {
 //! \param ackno The remote receiver's ackno (acknowledgment number)
 //! \param window_size The remote receiver's advertised window size
 void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_size) {
-    if (ackno > wrap(next_seqno_absolute(), _isn) or ackno < _ackno) {
-        // ackno 没有发送过的数据, 或者 ack 小于上一次的
+    uint64_t ackno_abs = unwrap(ackno, _isn, next_seqno_absolute());
+    if (ackno_abs > next_seqno_absolute() or ackno_abs < _ackno_abs) {
+        // ack 没有发送过的数据, 或者 ack 小于上一次的
         cout << "ackno is invalid" << endl;
         return;
     }
 
-    size_t ackedBytes = ackno - (_ackno.has_value() ? _ackno.value() : _isn);
+    size_t ackedBytes = ackno_abs - _ackno_abs;
     // 有新确认的数据之后，重置 timer
     if (ackedBytes > 0) {
         retx_timer.reset();
         _consecutive_retransmissions = 0;
     }
 
-    _ackno = ackno;
+    _ackno_abs = ackno_abs;
     _bytes_in_flight -= ackedBytes;
     _window_size = window_size;
     _sender_window_size = window_size > 0 ? window_size - bytes_in_flight() : 1;
-    remove_acknowledged_segments(ackno, segments_out());
-    remove_acknowledged_segments(ackno, _outstanding_segments);
+    remove_acknowledged_segments(ackno_abs, segments_out());
+    remove_acknowledged_segments(ackno_abs, _outstanding_segments);
     fill_window();
 }
 
-void TCPSender::remove_acknowledged_segments(const WrappingInt32 ackno, queue<TCPSegment> &segments_out) {
+void TCPSender::remove_acknowledged_segments(uint64_t ackno_abs, queue<TCPSegment> &segments_out) {
     size_t queue_length = segments_out.size();
     for (size_t i = 0; i < queue_length; i++) {
         TCPSegment seg = segments_out.front();
-        if (seg.header().seqno + seg.length_in_sequence_space() - ackno <= 0) {
+        uint64_t last_byte = unwrap(seg.header().seqno, _isn, next_seqno_absolute())
+                             + seg.length_in_sequence_space();
+        if (last_byte <= ackno_abs) {
             // has been acked
             segments_out.pop();
         } else {
@@ -176,6 +169,11 @@ void TCPSender::remove_acknowledged_segments(const WrappingInt32 ackno, queue<TC
     }
 }
 
+/*
+ 检查是否超过 RTO 时间，如果超过了就重发
+ 如果 window_size 是 0，不会让 rto 翻倍，这种情况由于不是网络拥塞造成的，只是 receiver 处理慢，所以快速的重发
+ 注意：syn_ack 之前，window_size 虽然是默认值 0，但是这时候其实还不知道 window_size，所以 rto 也会翻倍
+ */
 //! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method
 void TCPSender::tick(const size_t ms_since_last_tick) {
     retx_timer.tick(ms_since_last_tick);
