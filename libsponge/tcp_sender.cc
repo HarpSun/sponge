@@ -155,17 +155,15 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
 }
 
 void TCPSender::remove_acknowledged_segments(uint64_t ackno_abs, queue<TCPSegment> &segments_out) {
-    size_t queue_length = segments_out.size();
-    for (size_t i = 0; i < queue_length; i++) {
+    while (not segments_out.empty()) {
         TCPSegment seg = segments_out.front();
         uint64_t last_byte = unwrap(seg.header().seqno, _isn, next_seqno_absolute())
                              + seg.length_in_sequence_space();
-        if (last_byte <= ackno_abs) {
+        if (last_byte > ackno_abs) {
+            break;
+        } else {
             // has been acked
             segments_out.pop();
-        } else {
-            segments_out.pop();
-            segments_out.emplace(seg);
         }
     }
 }
