@@ -5,6 +5,7 @@
 #include "tcp_config.hh"
 #include "tcp_segment.hh"
 #include "wrapping_integers.hh"
+#include "retransmission_timer.hh"
 
 #include <functional>
 #include <queue>
@@ -39,7 +40,9 @@ class TCPSender {
     // 记录 receiver 发送过来的关键数据
     optional<WrappingInt32> _ackno;
     uint16_t _window_size{0};
+    uint16_t _sender_window_size{0};
     uint64_t _bytes_in_flight{0};
+    RetransmissionTimer retx_timer;
 
     TCPSegment make_segment(size_t payload_size, WrappingInt32 seqno);
     void remove_acknowledged_segments(const WrappingInt32 ackno, queue<TCPSegment> &segments_out);
