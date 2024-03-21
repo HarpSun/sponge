@@ -7,6 +7,9 @@
 
 using namespace std;
 
+/*
+ * 重传定时器
+ */
 class RetransmissionTimer {
   private:
     unsigned int _init_retransmission_timeout;

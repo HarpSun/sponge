@@ -23,13 +23,11 @@ class TCPSender {
 
     //! outbound queue of segments that the TCPSender wants sent
     std::queue<TCPSegment> _segments_out{};
+    // outstanding_segments 用于记录已经发送但还未确认的 segment, 用于重传
     std::queue<TCPSegment> _outstanding_segments{};
 
     //! retransmission timer for the connection
-    unsigned int _initial_retransmission_timeout;
-    unsigned int _retransmission_timeout;
-    bool timer_running{false};
-    size_t uptime{0};
+    RetransmissionTimer retx_timer;
     size_t _consecutive_retransmissions{0};
 
     //! outgoing stream of bytes that have not yet been sent
@@ -40,12 +38,13 @@ class TCPSender {
     // 记录 receiver 发送过来的关键数据
     optional<WrappingInt32> _ackno;
     uint16_t _window_size{0};
+    // sender 视角下的 window_size，需要扣除掉已经发送但还未确认的数据
     uint16_t _sender_window_size{0};
     uint64_t _bytes_in_flight{0};
-    RetransmissionTimer retx_timer;
 
     TCPSegment make_segment(size_t payload_size, WrappingInt32 seqno);
     void remove_acknowledged_segments(const WrappingInt32 ackno, queue<TCPSegment> &segments_out);
+    void _send_syn();
     void _fill_window();
     bool closed() const;
     bool syn_sent() const;

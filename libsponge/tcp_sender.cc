@@ -19,11 +19,9 @@ using namespace std;
 //! \param[in] fixed_isn the Initial Sequence Number to use, if set (otherwise uses a random ISN)
 TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const std::optional<WrappingInt32> fixed_isn)
     : _isn(fixed_isn.value_or(WrappingInt32{random_device()()}))
-    , _initial_retransmission_timeout{retx_timeout}
-    , _retransmission_timeout{retx_timeout}
+    , retx_timer(retx_timeout)
     , _stream(capacity)
-    , _ackno(nullopt)
-    , retx_timer(retx_timeout) {}
+    , _ackno(nullopt) {}
 
 uint64_t TCPSender::bytes_in_flight() const {
     return _bytes_in_flight;
@@ -54,32 +52,35 @@ bool TCPSender::fin_acked() const {
  fill_window 负责发送数据到 segments_out 队列中
  为了充分利用带宽，我们会一次发送多个包，包的大小由 buffer_size, window_size, MAX_PAYLOAD_SIZE 三个因素共同决定
  基本上来说，会尽量发送 MAX_PAYLOAD_SIZE 大小的包，但是如果 buffer_size 或 window_size 不足，则用两者之间最小的一个来决定包的大小
+
+ 注意：这个函数并不会重发数据，TCP 中的重发只会通过超时来触发，这个函数只负责填充 window
  */
 void TCPSender::fill_window() {
     if (closed()) {
-        cout << "closed" << endl;
-        // 还没建立连接的时候，还不知道对面的 window_size，所以就只发送一个 SYN
-        TCPSegment segment = make_segment(0, wrap(0, _isn));
-        segments_out().emplace(segment);
-        _outstanding_segments.push(segment);
-        if (not retx_timer.running()) {
-            retx_timer.start();
-        }
-        _next_seqno = 1;
-        _bytes_in_flight = 1;
+        _send_syn();
     } else if (syn_acked()) {
-        cout << "syn_sent or " << "syn_acked" << endl;
         _fill_window();
     } else {
-        // syn_sent or fin_sent or fin_acked
+        // syn_sent 之后只能等着回包，没有 window 可以填充
+        // fin_sent 同理，等着回包
+        // fin_acked 就结束发送了
     }
+}
+
+void TCPSender::_send_syn() {
+    // 还没建立连接的时候，还不知道对面的 window_size，所以就只发送一个 SYN
+    TCPSegment segment = make_segment(0, wrap(0, _isn));
+    segments_out().emplace(segment);
+    _outstanding_segments.push(segment);
+    if (not retx_timer.running()) {
+        retx_timer.start();
+    }
+    _next_seqno = 1;
+    _bytes_in_flight = 1;
 }
 
 void TCPSender::_fill_window() {
     size_t max_payload_size = TCPConfig::MAX_PAYLOAD_SIZE;
-    cout << "window_size: " << _sender_window_size << endl;
-    // 已经发送但是还没有被确认的数据也占用 window，所以要扣除
-    // _window_size = _window_size == 0 and not syn_sent() ? 1 : _window_size;
     while (_sender_window_size > 0 and not fin_sent()) {
         size_t buffer_size = stream_in().buffer_size();
         size_t payload_size = min(
@@ -112,7 +113,6 @@ void TCPSender::_fill_window() {
 TCPSegment TCPSender::make_segment(size_t payload_size, WrappingInt32 seqno) {
     TCPSegment segment = TCPSegment();
     string payload = stream_in().read(payload_size);
-     cout << "__log1: " << payload << endl;
     segment.payload() = std::string(payload);
     segment.header().seqno = seqno;
 
@@ -134,28 +134,29 @@ TCPSegment TCPSender::make_segment(size_t payload_size, WrappingInt32 seqno) {
 
 同时还要检查 segments_out 中是否有 seqno 小于 ack 的包，如果有的话就从 segments_out 中去掉
 这个很好理解，因为小于 ack 的都是已经被接收的，不需要再重新发送，这就是所谓的“累计确认”
+
+注意: 如果 receiver 窗口是 0，需要发送一个 1 字节的包，否则就不知道什么时候 receiver 的窗口空出来了
 */
 //! \param ackno The remote receiver's ackno (acknowledgment number)
 //! \param window_size The remote receiver's advertised window size
 void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_size) {
-    cout << "ack_received: " << ackno << " window_size: " << window_size << endl;
     if (ackno > wrap(next_seqno_absolute(), _isn) or ackno < _ackno) {
         // ackno 没有发送过的数据, 或者 ack 小于上一次的
         cout << "ackno is invalid" << endl;
         return;
     }
 
-    _ackno = ackno;
-    size_t unacked_bytes = wrap(next_seqno_absolute(), _isn) - ackno;
-    if (unacked_bytes < _bytes_in_flight) {
+    size_t ackedBytes = ackno - (_ackno.has_value() ? _ackno.value() : _isn);
+    // 有新确认的数据之后，重置 timer
+    if (ackedBytes > 0) {
         retx_timer.reset();
         _consecutive_retransmissions = 0;
     }
 
-    cout << "window_size: " << window_size << " unacked_bytes: " << unacked_bytes << endl;
-    _bytes_in_flight = unacked_bytes;
+    _ackno = ackno;
+    _bytes_in_flight -= ackedBytes;
     _window_size = window_size;
-    _sender_window_size = window_size > 0 ? window_size - unacked_bytes : 1;
+    _sender_window_size = window_size > 0 ? window_size - bytes_in_flight() : 1;
     remove_acknowledged_segments(ackno, segments_out());
     remove_acknowledged_segments(ackno, _outstanding_segments);
     fill_window();
@@ -181,7 +182,6 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
     if (_outstanding_segments.empty()) {
         return;
     } else {
-        cout << "uptime: " << uptime << " retransmission_timeout: " << _retransmission_timeout << endl;
         TCPSegment segment = _outstanding_segments.front();
         if (retx_timer.timeout()) {
             segments_out().emplace(segment);
