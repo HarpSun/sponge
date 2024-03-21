@@ -45,7 +45,7 @@ class TCPSender {
     TCPSegment make_segment(size_t payload_size, WrappingInt32 seqno);
     void remove_acknowledged_segments(uint64_t ackno_abs, queue<TCPSegment> &segments_out);
     void _fill_window();
-    void send_segment(size_t payload_size);
+    size_t send_segment(size_t payload_size);
     bool closed() const;
     bool syn_sent() const;
     bool syn_acked() const;

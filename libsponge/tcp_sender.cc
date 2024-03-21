@@ -81,11 +81,12 @@ void TCPSender::_fill_window() {
             // buffer 是空的，但是还没有写完所有数据
             break;
         }
-        send_segment(payload_size);
+        size_t size = send_segment(payload_size);
+        _sender_window_size -= size;
     }
 }
 
-void TCPSender::send_segment(size_t payload_size) {
+size_t TCPSender::send_segment(size_t payload_size) {
     TCPSegment segment = make_segment(payload_size, wrap(next_seqno_absolute(), _isn));
     segments_out().emplace(segment);
     _outstanding_segments.push(segment);
@@ -94,7 +95,7 @@ void TCPSender::send_segment(size_t payload_size) {
     }
     _next_seqno += segment.length_in_sequence_space();
     _bytes_in_flight += segment.length_in_sequence_space();
-    _sender_window_size = _sender_window_size > 0 ? _sender_window_size - segment.length_in_sequence_space() : 0;
+    return segment.length_in_sequence_space();
 }
 
 /*
