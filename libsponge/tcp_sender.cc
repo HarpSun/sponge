@@ -82,11 +82,7 @@ void TCPSender::_fill_window() {
     // sender 视角下的 window_size，需要扣除掉已经发送但还未确认的数据
     size_t window_size = _window_size > 0 ? _window_size - bytes_in_flight() : 0;
     while (window_size > 0 and not no_more_to_send()) {
-        size_t segment_size = min(
-            TCPConfig::MAX_PAYLOAD_SIZE + 1,
-            static_cast<size_t>(window_size)
-        );
-
+        size_t segment_size = min(TCPConfig::MAX_PAYLOAD_SIZE + 1, window_size);
         size_t size = send_segment(segment_size);
         window_size -= size;
     }
@@ -189,8 +185,8 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
     if (_outstanding_segments.empty()) {
         retx_timer.stop();
     } else {
-        TCPSegment segment = _outstanding_segments.front();
         if (retx_timer.timeout()) {
+            TCPSegment segment = _outstanding_segments.front();
             segments_out().emplace(segment);
             _consecutive_retransmissions += 1;
             if (_window_size > 0 or syn_sent()) {
