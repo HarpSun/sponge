@@ -47,10 +47,21 @@ bool TCPSender::fin_acked() const {
            and bytes_in_flight() == 0;
 }
 
+// 没数据可发了
+bool TCPSender::no_more_to_send() {
+    // 没数据可发分两种情况
+    // 1. buffer 是空的并且还没写完(注意: 写完了要发送 fin)
+    // 2. 已经发送了 fin
+    return (stream_in().buffer_empty() and not stream_in().eof()) or fin_sent();
+}
+
 /*
- fill_window 负责发送数据到 segments_out 队列中
- 为了充分利用带宽，我们会一次发送多个包，包的大小由 buffer_size, window_size, MAX_PAYLOAD_SIZE 三个因素共同决定
- 基本上来说，会尽量发送 MAX_PAYLOAD_SIZE 大小的包，但是如果 buffer_size 或 window_size 不足，则用两者之间最小的一个来决定包的大小
+ fill_window 负责发送数据到 segments_out 队列中,为了充分利用带宽，我们会一次发送多个 segment
+ segment 的大小受到两个因素限制：
+    1. MAX_PAYLOAD_SIZE，是 payload 所能携带的最大数据量，而 segment_size 还要再次之上 + 1
+    (这里要小心区分 payload_size 和 segment_size，payload_size 是发送数据的大小，而 segment_size 则在次基础之上还包含了 SYN 或 FIN)
+    2. window_size，不能发送超过 window_size 大小的包
+ 所以综上每一次发送 segment 的大小应该由 window_size, MAX_PAYLOAD_SIZE + 1 的最小值决定
 
  注意：这个函数并不会重发数据，TCP 中的重发只会通过超时来触发，这个函数只负责填充 window
  */
@@ -68,26 +79,21 @@ void TCPSender::fill_window() {
 }
 
 void TCPSender::_fill_window() {
-    size_t max_payload_size = TCPConfig::MAX_PAYLOAD_SIZE;
-    while (_sender_window_size > 0 and not fin_sent()) {
-        size_t buffer_size = stream_in().buffer_size();
-        size_t payload_size = min(
-            min(buffer_size, max_payload_size),
-            static_cast<size_t>(_sender_window_size)
+    // sender 视角下的 window_size，需要扣除掉已经发送但还未确认的数据
+    size_t window_size = _window_size > 0 ? _window_size - bytes_in_flight() : 0;
+    while (window_size > 0 and not no_more_to_send()) {
+        size_t segment_size = min(
+            TCPConfig::MAX_PAYLOAD_SIZE + 1,
+            static_cast<size_t>(window_size)
         );
-        // cout << "payload_size: " << payload_size << endl;
-        // cout << "next_seqno: " << next_seqno_absolute() << " bytes_flight: " << bytes_in_flight() << endl;
-        if (payload_size == 0 and not stream_in().eof()) {
-            // buffer 是空的，但是还没有写完所有数据
-            break;
-        }
-        size_t size = send_segment(payload_size);
-        _sender_window_size -= size;
+
+        size_t size = send_segment(segment_size);
+        window_size -= size;
     }
 }
 
-size_t TCPSender::send_segment(size_t payload_size) {
-    TCPSegment segment = make_segment(payload_size, wrap(next_seqno_absolute(), _isn));
+size_t TCPSender::send_segment(size_t segment_size) {
+    TCPSegment segment = make_segment(segment_size, wrap(next_seqno_absolute(), _isn));
     segments_out().emplace(segment);
     _outstanding_segments.push(segment);
     if (not retx_timer.running()) {
@@ -101,8 +107,9 @@ size_t TCPSender::send_segment(size_t payload_size) {
 /*
 生成要发送的 TCP 包
 */
-TCPSegment TCPSender::make_segment(size_t payload_size, WrappingInt32 seqno) {
+TCPSegment TCPSender::make_segment(size_t segment_size, WrappingInt32 seqno) {
     TCPSegment segment = TCPSegment();
+    size_t payload_size = min(segment_size, TCPConfig::MAX_PAYLOAD_SIZE);
     string payload = stream_in().read(payload_size);
     segment.payload() = std::string(payload);
     segment.header().seqno = seqno;
@@ -111,8 +118,8 @@ TCPSegment TCPSender::make_segment(size_t payload_size, WrappingInt32 seqno) {
         segment.header().syn = true;
     }
 
-    // fin 也占用 window 1 个字节
-    if (stream_in().eof() and _sender_window_size >= payload_size + 1) {
+    // buffer 全部读完了，并且 segment 还有空间，就带上 fin
+    if (stream_in().eof() and payload.length() < segment_size) {
         segment.header().fin = true;
     }
     // segment.print_tcp_segment();
@@ -148,10 +155,13 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     _ackno_abs = ackno_abs;
     _bytes_in_flight -= ackedBytes;
     _window_size = window_size;
-    _sender_window_size = window_size > 0 ? window_size - bytes_in_flight() : 1;
     remove_acknowledged_segments(ackno_abs, segments_out());
     remove_acknowledged_segments(ackno_abs, _outstanding_segments);
-    fill_window();
+    if (_window_size == 0) {
+        send_segment(1);
+    } else {
+        fill_window();
+    }
 }
 
 void TCPSender::remove_acknowledged_segments(uint64_t ackno_abs, queue<TCPSegment> &segments_out) {
@@ -177,7 +187,7 @@ void TCPSender::remove_acknowledged_segments(uint64_t ackno_abs, queue<TCPSegmen
 void TCPSender::tick(const size_t ms_since_last_tick) {
     retx_timer.tick(ms_since_last_tick);
     if (_outstanding_segments.empty()) {
-        return;
+        retx_timer.stop();
     } else {
         TCPSegment segment = _outstanding_segments.front();
         if (retx_timer.timeout()) {

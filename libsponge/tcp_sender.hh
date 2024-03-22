@@ -38,14 +38,13 @@ class TCPSender {
     // 记录 receiver 发送过来的关键数据
     uint64_t _ackno_abs{0};
     uint16_t _window_size{0};
-    // sender 视角下的 window_size，需要扣除掉已经发送但还未确认的数据
-    uint16_t _sender_window_size{0};
     uint64_t _bytes_in_flight{0};
 
     TCPSegment make_segment(size_t payload_size, WrappingInt32 seqno);
     void remove_acknowledged_segments(uint64_t ackno_abs, queue<TCPSegment> &segments_out);
     void _fill_window();
     size_t send_segment(size_t payload_size);
+    bool no_more_to_send();
     bool closed() const;
     bool syn_sent() const;
     bool syn_acked() const;

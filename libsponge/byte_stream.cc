@@ -61,13 +61,13 @@ size_t ByteStream::write(const string &data) {
  */
 std::string ByteStream::read(const size_t len) {
     string res = "";
-    for (size_t i = 0; i < len; i++) {
-        // c++ dequeu pop_front 不返回 pop 掉的元素。。。
-        // 所以 pop 前要先获取 front
+    size_t i = 0;
+    while (i < len and not this->byteQueue.empty()) {
         res += this->byteQueue.front();
         this->byteQueue.pop_front();
+        i++;
     }
-    this->bytesRead += len;
+    this->bytesRead += i;
     return res;
 }
 
