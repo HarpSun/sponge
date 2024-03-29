@@ -50,7 +50,7 @@ bool TCPSender::fin_acked() const {
 // 没数据可发了
 bool TCPSender::no_more_to_send() {
     // 没数据可发分两种情况
-    // 1. buffer 是空的并且还没写完(注意: 写完了要发送 fin)
+    // 1. buffer 是空的但是还没写完(注意: 写完了要发送 fin)
     // 2. 已经发送了 fin
     return (stream_in().buffer_empty() and not stream_in().eof()) or fin_sent();
 }
