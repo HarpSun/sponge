@@ -22,7 +22,32 @@ size_t TCPConnection::unassembled_bytes() const { return _receiver.unassembled_b
 
 size_t TCPConnection::time_since_last_segment_received() const { return {}; }
 
-void TCPConnection::segment_received(const TCPSegment &seg) { DUMMY_CODE(seg); }
+/*
+ 接收到的信息逻辑上可以分成两种，一种是 sender 发来的要传输的数据，另一种是 receiver 发送的 ACK
+ 这两种信息可以在一个 segment 里面
+ */
+void TCPConnection::segment_received(const TCPSegment &seg) {
+    _receiver.segment_received(seg);
+    _sender.ack_received(seg.header().ackno, seg.header().win);
+
+    if (_sender.segments_out().empty()) {
+        TCPSegment segment = TCPSegment();
+        if (_receiver.ackno().has_value()) {
+            segment.header().ackno = _receiver.ackno().value();
+        }
+        segment.header().win = _receiver.window_size();
+    } else {
+        while (not _sender.segments_out().empty()) {
+            TCPSegment segment = _sender.segments_out().front();
+            if (_receiver.ackno().has_value()) {
+                segment.header().ackno = _receiver.ackno().value();
+            }
+            segment.header().win = _receiver.window_size();
+            _segments_out.push(segment);
+            _sender.segments_out().pop();
+        }
+    }
+}
 
 bool TCPConnection::active() const {
     return not _sender.stream_in().eof() or
