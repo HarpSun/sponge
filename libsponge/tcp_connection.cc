@@ -23,31 +23,51 @@ size_t TCPConnection::unassembled_bytes() const { return _receiver.unassembled_b
 size_t TCPConnection::time_since_last_segment_received() const { return {}; }
 
 /*
- 接收到的信息逻辑上可以分成两种，一种是 sender 发来的要传输的数据，另一种是 receiver 发送的 ACK
- 这两种信息可以在一个 segment 里面
+ segment_received 要做的事情有两件
+ 1. 处理对面发送来的包
+ 如果是 ack 就要通知 sender 发送更多的包，如果是数据包就要通知 receiver 重组，如果是 rst 就要将连接中断
+ 2. 往对面发包
+ 发送对面的包分两种，一种是 ack，还有一种是数据包
+ 其中 ack 只有收到数据包之后才发送，而数据包是只要 sender 有可发的就发送，并且数据包可以带上 ack 一起发
  */
 void TCPConnection::segment_received(const TCPSegment &seg) {
-    _receiver.segment_received(seg);
-    _sender.ack_received(seg.header().ackno, seg.header().win);
+    // handle received segment
+    if (seg.header().rst) {
+        _sender.stream_in().set_error();
+        _receiver.stream_out().set_error();
+    }
 
-    if (_sender.segments_out().empty()) {
+    if (seg.header().ack) {
+        _sender.ack_received(seg.header().ackno, seg.header().win);
+    }
+
+    if (seg.length_in_sequence_space() > 0) {
+        _receiver.segment_received(seg);
+    }
+
+    // send segment to peer
+    if (_sender.segments_out().empty() and seg.length_in_sequence_space() > 0) {
         TCPSegment segment = TCPSegment();
-        if (_receiver.ackno().has_value()) {
-            segment.header().ackno = _receiver.ackno().value();
-        }
-        segment.header().win = _receiver.window_size();
-        _sender.segments_out().pop();
+        patch_ack(segment);
+        _segments_out.push(segment);
     } else {
         while (not _sender.segments_out().empty()) {
             TCPSegment segment = _sender.segments_out().front();
-            if (_receiver.ackno().has_value()) {
-                segment.header().ackno = _receiver.ackno().value();
+            if (seg.length_in_sequence_space() > 0) {
+                patch_ack(segment);
             }
-            segment.header().win = _receiver.window_size();
             _segments_out.push(segment);
             _sender.segments_out().pop();
         }
     }
+}
+
+void TCPConnection::patch_ack(TCPSegment& segment) {
+    if (_receiver.ackno().has_value()) {
+        segment.header().ackno = _receiver.ackno().value();
+    }
+    segment.header().win = _receiver.window_size();
+    segment.header().ack = true;
 }
 
 bool TCPConnection::active() const {
@@ -61,7 +81,9 @@ size_t TCPConnection::write(const string &data) {
 }
 
 //! \param[in] ms_since_last_tick number of milliseconds since the last call to this method
-void TCPConnection::tick(const size_t ms_since_last_tick) { DUMMY_CODE(ms_since_last_tick); }
+void TCPConnection::tick(const size_t ms_since_last_tick) {
+    _sender.tick(ms_since_last_tick);
+}
 
 void TCPConnection::end_input_stream() {}
 
@@ -75,8 +97,11 @@ TCPConnection::~TCPConnection() {
     try {
         if (active()) {
             cerr << "Warning: Unclean shutdown of TCPConnection\n";
-
-            // Your code here: need to send a RST segment to the peer
+            _sender.send_empty_segment();
+            TCPSegment seg = _sender.segments_out().front();
+            seg.header().rst = true;
+            _segments_out.push(seg);
+            _sender.segments_out().pop();
         }
     } catch (const exception &e) {
         std::cerr << "Exception destructing TCP FSM: " << e.what() << std::endl;

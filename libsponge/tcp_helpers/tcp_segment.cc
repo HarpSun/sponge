@@ -29,7 +29,7 @@ size_t TCPSegment::length_in_sequence_space() const {
 
 void TCPSegment::print_tcp_segment() const {
     cout << "======= TCPSegment =========" << endl;
-    cout << "header: " << header().seqno << " syn: " << header().syn << " fin: " << header().fin
+    cout << "header: " << header().seqno << " syn: " << header().syn << " fin: " << header().fin << " ack: " << header().ack
          << " seqno: " << header().seqno << " ackno: " << header().ackno << " checksum: " << header().cksum
          << " window_size:" << header().win << endl;
     cout << "payload: " << payload().size() << " " << payload().str() << endl;
