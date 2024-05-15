@@ -153,7 +153,7 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     _window_size = window_size;
     remove_acknowledged_segments(ackno_abs, segments_out());
     remove_acknowledged_segments(ackno_abs, _outstanding_segments);
-    if (_window_size == 0) {
+    if (_window_size == 0 and not no_more_to_send()) {
         send_segment(1);
     } else {
         fill_window();

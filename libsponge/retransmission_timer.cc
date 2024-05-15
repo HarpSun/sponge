@@ -1,4 +1,5 @@
 #include "retransmission_timer.hh"
+#include "tcp_config.hh"
 
 template <typename... Targs>
 void DUMMY_CODE(Targs &&... /* unused */) {}
@@ -41,4 +42,8 @@ void RetransmissionTimer::backoff() {
 
 bool RetransmissionTimer::running() const {
     return _running;
+}
+
+size_t RetransmissionTimer::uptime() const {
+    return _uptime;
 }

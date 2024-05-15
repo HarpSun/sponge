@@ -45,10 +45,6 @@ class TCPSender {
     void _fill_window();
     size_t send_segment(size_t payload_size);
     bool no_more_to_send();
-    bool closed() const;
-    bool syn_sent() const;
-    bool syn_acked() const;
-    bool fin_sent() const;
 
   public:
     //! Initialize a TCPSender
@@ -56,6 +52,10 @@ class TCPSender {
               const uint16_t retx_timeout = TCPConfig::TIMEOUT_DFLT,
               const std::optional<WrappingInt32> fixed_isn = {});
 
+    bool closed() const;
+    bool syn_sent() const;
+    bool syn_acked() const;
+    bool fin_sent() const;
     bool fin_acked() const;
 
     //! \name "Input" interface for the writer

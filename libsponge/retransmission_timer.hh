@@ -27,6 +27,7 @@ class RetransmissionTimer {
     bool timeout();
     void backoff();
     bool running() const;
+    size_t uptime() const;
 };
 
 #endif  // SPONGE_LIBSPONGE_RETRANSMISSION_TIMER_HH

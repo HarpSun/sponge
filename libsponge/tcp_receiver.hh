@@ -23,11 +23,6 @@ class TCPReceiver {
     void handle_listen(const TCPSegment &seg);
     void handle_syn_recv(const TCPSegment &seg);
 
-    // receiver 的状态
-    bool listen() const;
-    bool syn_recv() const;
-    bool fin_recv() const;
-
   public:
     //! \brief Construct a TCP receiver
     //!
@@ -37,6 +32,11 @@ class TCPReceiver {
         _reassembler(capacity),
         _capacity(capacity),
         _isn(nullopt) {}
+
+    // receiver 的状态
+    bool listen() const;
+    bool syn_recv() const;
+    bool fin_recv() const;
 
     //! \name Accessors to provide feedback to the remote TCPSender
     //!@{
