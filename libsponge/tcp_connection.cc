@@ -1,5 +1,6 @@
 #include "tcp_connection.hh"
 
+#include <cassert>
 #include <iostream>
 
 // Dummy implementation of a TCP connection
@@ -43,6 +44,9 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
 
     if (seg.length_in_sequence_space() > 0) {
         _receiver.segment_received(seg);
+        if (inbound_stream().eof() and not _sender.stream_in().input_ended()) {
+            _linger_after_streams_finish = false;
+        }
     }
 
     // send segment to peer
@@ -71,9 +75,11 @@ void TCPConnection::patch_ack(TCPSegment& segment) {
 }
 
 bool TCPConnection::active() const {
-    return not _sender.stream_in().eof() or
-           not _receiver.stream_out().eof() or
-           _linger_after_streams_finish;
+    bool error = _sender.stream_in().error() and _receiver.stream_out().error();
+    bool done = _sender.fin_acked() and
+                _receiver.stream_out().eof() and
+                not _linger_after_streams_finish;
+    return (not error) and (not done);
 }
 
 size_t TCPConnection::write(const string &data) {
@@ -83,9 +89,24 @@ size_t TCPConnection::write(const string &data) {
 //! \param[in] ms_since_last_tick number of milliseconds since the last call to this method
 void TCPConnection::tick(const size_t ms_since_last_tick) {
     _sender.tick(ms_since_last_tick);
+    TCPSegment segment = _sender.segments_out().front();
+    _segments_out.push(segment);
+    _sender.segments_out().pop();
 }
 
-void TCPConnection::end_input_stream() {}
+void TCPConnection::end_input_stream() {
+    // receiver has received all data
+    _sender.stream_in().end_input();
+    // 被动关闭连接
+    if (inbound_stream().eof()) {
+        _sender.fill_window();
+        cout << not _sender.segments_out().empty() << endl;
+        TCPSegment segment = _sender.segments_out().front();
+        _sender.segments_out().pop();
+        patch_ack(segment);
+        _segments_out.push(segment);
+    }
+}
 
 void TCPConnection::connect() {
     _sender.fill_window();

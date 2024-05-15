@@ -49,13 +49,14 @@ class TCPSender {
     bool syn_sent() const;
     bool syn_acked() const;
     bool fin_sent() const;
-    bool fin_acked() const;
 
   public:
     //! Initialize a TCPSender
     TCPSender(const size_t capacity = TCPConfig::DEFAULT_CAPACITY,
               const uint16_t retx_timeout = TCPConfig::TIMEOUT_DFLT,
               const std::optional<WrappingInt32> fixed_isn = {});
+
+    bool fin_acked() const;
 
     //! \name "Input" interface for the writer
     //!@{
