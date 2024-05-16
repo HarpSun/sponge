@@ -131,10 +131,12 @@ void TCPConnection::end_input_stream() {
     _sender.stream_in().end_input();
     // 被动关闭连接
     _sender.fill_window();
-    TCPSegment segment = _sender.segments_out().front();
-    _sender.segments_out().pop();
-    patch_ack(segment);
-    _segments_out.push(segment);
+    while (not _sender.segments_out().empty()) {
+        TCPSegment segment = _sender.segments_out().front();
+        patch_ack(segment);
+        _segments_out.push(segment);
+        _sender.segments_out().pop();
+    }
 }
 
 void TCPConnection::connect() {
