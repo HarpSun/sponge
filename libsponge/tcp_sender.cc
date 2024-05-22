@@ -80,7 +80,7 @@ void TCPSender::fill_window() {
 
 void TCPSender::_fill_window() {
     // sender 视角下的 window_size，需要扣除掉已经发送但还未确认的数据
-    size_t window_size = _window_size > 0 ? _window_size - bytes_in_flight() : 0;
+    size_t window_size = _window_size > 0 and _window_size >= bytes_in_flight() ? _window_size - bytes_in_flight() : 0;
     while (window_size > 0 and not no_more_to_send()) {
         size_t segment_size = min(TCPConfig::MAX_PAYLOAD_SIZE + 1, window_size);
         size_t size = send_segment(segment_size);

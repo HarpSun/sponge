@@ -66,8 +66,22 @@ void StreamReassembler::push_substring(const string &data, const uint64_t index,
         reassemble_data(d, index);
     }
 
-    bool acceptedEof = eof and (remainCapacity >= data.length());
-    set_end_input(acceptedEof);
+    check_eof(data, index, eof);
+}
+
+void StreamReassembler::check_eof(const string &data, const uint64_t index, const bool eof) {
+    if (eof) {
+        // 没有发送数据，SYN 之后直接 FIN
+        if (index == 0 and data.empty()) {
+            end_index = 0;
+        } else {
+            end_index = !data.empty() ? index + data.length() : index;
+        }
+    }
+
+    if (end_index.has_value() and nextReassembledIndex == end_index) {
+        _output.end_input();
+    }
 }
 
 // 输出内部状态，调试用
@@ -140,23 +154,6 @@ void StreamReassembler::cache_data(const string &data, const uint64_t index) {
             and unassembledMap[index].length() < data.length()))
     {
         unassembledMap[index] = data;
-    }
-}
-
-
-void StreamReassembler::set_end_input(bool eof) {
-    // 所有数据重组完之后 需要调用 end_input
-    // eof 为 true 表示我们收到的数据是完整数据的最后一段
-    // 由于数据接受的顺序是无法保证的 所以即使 eof 为 true 也不能说我们的数据都重组完了
-    // 所以在满足两个条件后才可以调用 end_input
-    // 1. 收到了完整数据的最后一段
-    // 2. 临时存储为空
-    if (eof) {
-        receiveEof = true;
-    }
-
-    if (receiveEof and unassembledMap.empty()) {
-        _output.end_input();
     }
 }
 
