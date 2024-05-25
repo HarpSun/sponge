@@ -90,7 +90,7 @@ void TCPSender::_fill_window() {
 
 size_t TCPSender::send_segment(size_t segment_size) {
     TCPSegment segment = make_segment(segment_size, wrap(next_seqno_absolute(), _isn));
-    segments_out().emplace(segment);
+    segments_out().push(segment);
     _outstanding_segments.push(segment);
     if (not retx_timer.running()) {
         retx_timer.start();
@@ -104,10 +104,9 @@ size_t TCPSender::send_segment(size_t segment_size) {
 生成要发送的 TCP 包
 */
 TCPSegment TCPSender::make_segment(size_t segment_size, WrappingInt32 seqno) {
-    TCPSegment segment = TCPSegment();
+    TCPSegment segment;
     size_t payload_size = min(segment_size, TCPConfig::MAX_PAYLOAD_SIZE);
-    string payload = stream_in().read(payload_size);
-    segment.payload() = std::string(payload);
+    segment.payload() = Buffer(_stream.read(payload_size));
     segment.header().seqno = seqno;
 
     if (closed()) {
@@ -115,7 +114,7 @@ TCPSegment TCPSender::make_segment(size_t segment_size, WrappingInt32 seqno) {
     }
 
     // buffer 全部读完了，并且 segment 还有空间，就带上 fin
-    if (stream_in().eof() and payload.length() < segment_size) {
+    if (stream_in().eof() and segment.length_in_sequence_space() < segment_size) {
         segment.header().fin = true;
     }
     // segment.print_tcp_segment();
@@ -187,7 +186,7 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
     } else {
         if (retx_timer.timeout()) {
             TCPSegment segment = _outstanding_segments.front();
-            segments_out().emplace(segment);
+            segments_out().push(segment);
             _consecutive_retransmissions += 1;
             if (_window_size > 0 or syn_sent()) {
                 retx_timer.backoff();
@@ -200,6 +199,7 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
 unsigned int TCPSender::consecutive_retransmissions() const { return _consecutive_retransmissions; }
 
 void TCPSender::send_empty_segment() {
-    TCPSegment seg = make_segment(0, wrap(next_seqno_absolute(), _isn));
-    segments_out().emplace(seg);
+    TCPSegment seg;
+    seg.header().seqno = wrap(_next_seqno, _isn);
+    _segments_out.push(seg);
 }

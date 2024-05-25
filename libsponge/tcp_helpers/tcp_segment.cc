@@ -27,15 +27,15 @@ size_t TCPSegment::length_in_sequence_space() const {
     return payload().str().size() + (header().syn ? 1 : 0) + (header().fin ? 1 : 0);
 }
 
-void TCPSegment::print_tcp_segment() const {
-    cerr << endl;
-    cerr << "======= TCPSegment =========" << endl;
-    cerr << "header: " << header().dport << " " << header().sport << endl;
-    cerr << "header: " << header().seqno << " syn: " << header().syn << " fin: " << header().fin << " ack: " << header().ack
-         << " seqno: " << header().seqno << " ackno: " << header().ackno << " checksum: " << header().cksum
-         << " window_size:" << header().win << endl;
-    cerr << "payload: " << payload().size() << " " << payload().str() << endl;
-    cerr << "======= END =========" << endl;
+string TCPSegment::print_tcp_segment() const {
+    string s = "======= TCPSegment =========\n";
+    s += "header: " + to_string(header().dport) + " " + to_string(header().sport) + "\n";
+    s += "header: " + to_string(header().seqno.raw_value()) + " syn: " + to_string(header().syn) + " fin: " + to_string(header().fin) + " ack: " + to_string(header().ack) + "rst: " + to_string(header().rst)
+         + " seqno: " + to_string(header().seqno.raw_value()) + " ackno: " + to_string(header().ackno.raw_value()) + " checksum: " + to_string(header().cksum)
+         + " window_size:" + to_string(header().win) + "\n";
+    s += "payload: " + to_string(payload().size()) + "\n";
+    s += "======= END =========\n";
+    return s;
 }
 
 //! \param[in] datagram_layer_checksum pseudo-checksum from the lower-layer protocol

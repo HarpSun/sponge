@@ -1,6 +1,7 @@
 #include "tcp_connection.hh"
 
 #include <iostream>
+#include <mutex>
 
 // Dummy implementation of a TCP connection
 
@@ -31,8 +32,6 @@ size_t TCPConnection::time_since_last_segment_received() const { return _time_si
  其中 ack 只有收到数据包之后才发送，而数据包是只要 sender 有可发的就发送，并且数据包可以带上 ack 一起发
  */
 void TCPConnection::segment_received(const TCPSegment &seg) {
-    seg.print_tcp_segment();
-
     if (_receiver.listen() and not (seg.header().ack or seg.header().syn)) {
         return;
     }
@@ -67,28 +66,26 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
 }
 
 void TCPConnection::send_ack() {
-    TCPSegment segment = TCPSegment();
-    patch_ack(segment);
-    _segments_out.push(segment);
-    segment.print_tcp_segment();
+    _sender.send_empty_segment();
+    send_data();
 }
 
 void TCPConnection::send_rst() {
     _sender.send_empty_segment();
-    TCPSegment segment = _sender.segments_out().front();
-    segment.header().rst = true;
-    _segments_out.push(segment);
-    _sender.segments_out().pop();
-    segment.print_tcp_segment();
+    while (not _sender.segments_out().empty()) {
+        TCPSegment segment = _sender.segments_out().front();
+        _sender.segments_out().pop();
+        segment.header().rst = true;
+        _segments_out.push(segment);
+    }
 }
 
 void TCPConnection::send_data() {
     while (not _sender.segments_out().empty()) {
         TCPSegment segment = _sender.segments_out().front();
+        _sender.segments_out().pop();
         patch_ack(segment);
         _segments_out.push(segment);
-        _sender.segments_out().pop();
-        segment.print_tcp_segment();
     }
 }
 
@@ -96,8 +93,8 @@ void TCPConnection::patch_ack(TCPSegment& segment) {
     if (_receiver.ackno().has_value()) {
         segment.header().ackno = _receiver.ackno().value();
         segment.header().ack = true;
-        segment.header().win = _receiver.window_size();
     }
+    segment.header().win = static_cast<uint16_t>(_receiver.window_size());
 }
 
 bool TCPConnection::active() const {

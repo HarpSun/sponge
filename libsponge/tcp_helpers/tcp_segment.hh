@@ -19,7 +19,7 @@ class TCPSegment {
     //! \brief Serialize the segment to a string
     BufferList serialize(const uint32_t datagram_layer_checksum = 0) const;
 
-    void print_tcp_segment() const;
+    std::string print_tcp_segment() const;
     //! \name Accessors
     //!@{
     const TCPHeader &header() const { return _header; }
