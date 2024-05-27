@@ -112,6 +112,18 @@ size_t TCPConnection::write(const string &data) {
     return size;
 }
 
+/*
+ 关于关闭连接，正常情况下，关闭连接双方都要满足两个条件：
+ 1. 对面完整接收了所有的数据
+ 2. 完整接收了对面所有的数据
+
+ 对于后发送完数据的一方，2 已经满足
+ 只要等到最后的 FIN 被 ACK 之后，1 也就满足了，此时可以直接关闭连接
+
+ 而对于先发送完数据的一方（也就是满足条件1），要负责等待，等到对面也发送完之后，回复 ACK，
+ 但是这个时候还不能断开连接，因为对面可能没收到 ACK，这样对面就无法关闭连接，但是也不能 ACK ACK，因为两军问题（two general problem)
+ 所以回复完 ACK 之后，还要继续等待一段时间，对面如果没有重发，那就认为对面已收到，此时可以断开连接
+ */
 //! \param[in] ms_since_last_tick number of milliseconds since the last call to this method
 void TCPConnection::tick(const size_t ms_since_last_tick) {
     _time_since_last_segment_received += ms_since_last_tick;
